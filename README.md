@@ -20,13 +20,20 @@
 > 需要 DSH Desktop（或支持 `dsh plugin add` 的 DSH 安装）。插件作为 profile bundle 安装。
 
 ```sh
-# 从本仓库构建产物直接安装（npm 包名 @lyhue1991/dsh-tree）
-dsh plugin add @lyhue1991/dsh-tree
+# 安装当前版本 0.1.2（npm 包名 @lyhue1991/dsh-tree）
+dsh plugin add @lyhue1991/dsh-tree@0.1.2
 ```
 
 或通过 DSH Desktop「设置 → 插件 → 插件市场」搜索安装。
 
 安装后重启 DSH，在任意会话头部（Session log 右侧）点击 📁 即可打开资源管理器。
+
+## 更新
+
+### 0.1.2
+
+- 修复 details 插槽注册优先级，确保文件树面板正确显示在右侧详情列。
+- 修复浏览器半区的布局实例引用，供文件树面板的布局操作正常使用。
 
 ## 开发
 
