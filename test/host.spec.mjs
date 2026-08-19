@@ -1,4 +1,4 @@
-import { apply } from '/Users/liangyun/Codes/dsh-tree/lib/index.js'
+import { apply } from '../lib/index.js'
 
 let captured = null
 const ctx = {
