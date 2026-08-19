@@ -3,4 +3,4 @@
 # details 右列面板 + Session log 右侧 📁 切换按钮。
 - insert:
     - id: ui-dsh-tree
-      name: 'dsh-tree'
+      name: '@lyhue1991/dsh-tree'

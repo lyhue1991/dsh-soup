@@ -1,5 +1,5 @@
 {
-  "name": "dsh-tree",
+  "name": "@lyhue1991/dsh-tree",
   "description": "DSH 项目资源管理器：右侧 details 列文件树（并列网格、宽度与左侧工作区一致 264-420px），Session log 右侧 📁 切换按钮；支持多选、双击展开/打开、右键菜单（系统打开/重命名/废纸篓/新建/复制路径）、拖拽移动、上传。",
   "version": "0.1.0",
   "type": "module",
@@ -23,6 +23,10 @@
     }
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "files": [
     "lib",
     "cordis.patch.yml",

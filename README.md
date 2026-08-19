@@ -20,8 +20,8 @@
 > 需要 DSH Desktop（或支持 `dsh plugin add` 的 DSH 安装）。插件作为 profile bundle 安装。
 
 ```sh
-# 从本仓库构建产物直接安装（npm 包名 dsh-tree）
-dsh plugin add dsh-tree
+# 从本仓库构建产物直接安装（npm 包名 @lyhue1991/dsh-tree）
+dsh plugin add @lyhue1991/dsh-tree
 ```
 
 或通过 DSH Desktop「设置 → 插件 → 插件市场」搜索安装。
