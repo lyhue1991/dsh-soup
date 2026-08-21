@@ -1,8 +1,11 @@
 import { apply } from '../lib/index.js'
 
 let captured = null
+let streamListener = null
 const ctx = {
   effect: (fn) => { const d = fn(); return () => { if (d) d() } },
+  on: (name, fn) => { if (name === 'llm/stream') streamListener = fn; return () => { if (name === 'llm/stream') streamListener = null } },
+  timer: { interval: () => () => {} },
   webServer: { register: (route) => { captured = route; return () => { captured = null } } },
   fs: {
     resolve: async (p) => ({ displayPath: p }),
@@ -46,4 +49,28 @@ const r6 = await call({ action: 'create', args: { dir: '/tmp/dsh-tree-smoke', na
 if (r6.body.ok) throw new Error('create should reject bad name')
 const r7 = await call({ action: 'unknown', args: {} })
 if (r7.body.ok) throw new Error('unknown should fail')
-console.log('SMOKE OK: root, sessionCwd, list, open, create-guard, unknown-guard')
+
+// ---- speed-status：无流时 idle；有流后按 chunk 累计 ----
+const s0 = await call({ action: 'speed-status', args: { sessionId: 's9' } })
+if (s0.body.phase !== 'idle') throw new Error('speed should be idle: ' + JSON.stringify(s0.body))
+
+// 模拟 llm/stream：waiting → streaming（首 chunk）→ done
+const options = { sessionId: 's9' }
+const nextStream = (async function* () {
+  yield { delta: { content: '你' } }
+  yield { delta: { content: '好，世界' } }
+  yield { usage: { outputTokens: 5 } }
+})()
+const wrapped = streamListener(options, () => Promise.resolve(nextStream))
+// 消费前先查一次：应处于 waiting
+const w1 = await call({ action: 'speed-status', args: { sessionId: 's9' } })
+if (w1.body.phase !== 'waiting') throw new Error('expected waiting, got ' + w1.body.phase)
+
+// 消费整个流
+for await (const _c of wrapped) { /* drain */ }
+const w2 = await call({ action: 'speed-status', args: { sessionId: 's9' } })
+if (w2.body.phase !== 'done') throw new Error('expected done, got ' + w2.body.phase)
+if (typeof w2.body.tokens !== 'number' || w2.body.tokens < 0) throw new Error('bad tokens: ' + JSON.stringify(w2.body))
+if (w2.body.tps !== 0) throw new Error('tps should be 0 after done: ' + JSON.stringify(w2.body))
+
+console.log('SMOKE OK: root, sessionCwd, list, open, create-guard, unknown-guard, speed idle/waiting/stream/done')
