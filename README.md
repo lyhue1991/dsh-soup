@@ -57,14 +57,21 @@ cd dsh-tree
 ## 实现说明
 
 - **宿主↔浏览器桥梁**：永久插件（profile bundle）不经过 dynamic runner，没有 `harness.handle`/`host.call`；宿主用 `webServer.register({ kind: 'exact', path: '/api/dsh-tree', handler })` 注册同源 HTTP 路由，浏览器用 `fetch` POST JSON 调用（`{ action, args }` 分派）。
-- **动作**：`root` / `sessionCwd` / `list` / `open`（`/usr/bin/open`）/ `trash`（Finder osascript）/ `move`（`/bin/mv`）/ `create`（`mkdir -p` / `touch`）/ `upload`（`base64 -D`）/ `speed-status`（返回 `{ phase, tokens, tps, ttft }`）。
+- **动作**：`root` / `sessionCwd` / `list` / `open` / `trash` / `move` / `create` / `upload` / `speed-status`（返回 `{ phase, tokens, tps, ttft }`）。
+- **跨平台**：`move` / `create` / `upload` 直接用 `node:fs/promises`（`rename`/`mkdir`/`writeFile`），mac/Linux/Windows 通用、无 shell 注入面；仅 `open` / `trash` 这类「唤起系统」的动作按 `process.platform` 分支选命令（见下表）。
 - **吞吐统计**：`ctx.on('llm/stream', ...)` 包装 waterfall，按会话（`sessionId`/`agent.id`/`meta` 探测）维护 `{ phase: waiting|streaming|done, tokens, tps, ttft }`；首 chunk 到达标记 streaming（TTFT），结束后 4s 清除；`speed-status` 查询时按流开始累计秒数算平均 t/s（0.5s 暖机）。
 - **宽度接管**：MutationObserver 监听 shell 框架的 `grid-template-columns`，把 details 轨改写为插件宽度（264–420px），并在 shell 重渲染后保持；`[data-side="details"]` 隐藏 shell 自带手柄，改用面板左缘自定义拖拽手柄。
 - **主题**：全部使用 DSH 主题 token（`--dsw-specific-sidebar-fill`、`--dsw-alias-*` 等），跟随桌面明暗配色。
 
 ## 平台
 
-macOS（`/usr/bin/open`、`osascript` 移入废纸篓）。其他平台可 fork 后替换 `lib/index.js` 中对应动作实现。
+| 平台 | 系统打开 (`open`) | 移到废纸篓 (`trash`) | 移动/新建/上传 |
+| --- | --- | --- | --- |
+| macOS | `/usr/bin/open` | Finder `osascript` | `node:fs` |
+| Linux | `xdg-open` | `gio trash`（回退 `trash-cli`） | `node:fs` |
+| Windows | `cmd /c start` | PowerShell `Shell.Application`（回收站） | `node:fs` |
+
+> 文件核心（浏览/移动/新建/上传）三平台完全一致；仅「系统打开」与「移到废纸篓」依赖各平台自带工具，这是 VS Code / Electron 等所有应用的标准做法。
 
 ## 许可证
 
