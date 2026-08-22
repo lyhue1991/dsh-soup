@@ -1,6 +1,6 @@
 # dsh-tree — DSH 项目资源管理器
 
-一个可安装的 DSH（DeepSeek Harness）插件：在会话右侧以**并列网格列**的形式提供项目文件树，与左侧工作区同款配色、同宽（默认 280px，可拖拽 264–420px）。并附带**模型吞吐徽标**：输入框正上方实时显示「正在等待模型...」与彩色 `t/s` 速率徽标。**三平台通用**（macOS / Linux / Windows）。
+一个可安装的 DSH（DeepSeek Harness）插件：在会话右侧以**并列网格列**的形式提供项目文件树，与左侧工作区同款配色、同宽（默认 280px，可拖拽 264–420px）。并附带**模型吞吐徽标**（输入框正上方实时显示「正在等待模型...」与彩色 `t/s` 速率）与**目标卡片**（参考 pi-web 的 GoalPanel，把默认的一行 GoalBar 升级为卡片式展示）。**三平台通用**（macOS / Linux / Windows）。
 
 ## 功能
 
@@ -20,6 +20,13 @@
 - **流式阶段**：token 计数（向下箭头）+ 彩色 `xx.x t/s` 徽标（≥50 青 / ≥30 绿 / ≥15 黄 / 其余红）。
 - **数据源**：Host 包 `llm/stream` waterfall 实时统计真实 chunk/token（优先 usage 的 `outputTokens`，退化 CJK 字符估算），比浏览器端估算更准。
 
+### 目标卡片（Goal 卡片）
+- 参考 **pi-web 的 GoalPanel** 设计，把 DSH 默认的一行 GoalBar 升级为**卡片式两行展示**（不改 DSH 源码，用 `conversation.input.dock` 槽位同 id + 更低 priority 原生遮蔽默认实现）。
+- **第一行**：状态圆点（进行中绿 / 已暂停琥珀 / 受阻橙红）+ 相位标签 + 右侧 meta（`用时 · 已开始/上限 轮次`）+ 操作按钮（暂停 / 恢复 / 编辑 / 清除）。
+- **第二行**：完整 objective 多行展示（`pre-wrap` 换行，不再截断）。
+- **编辑**：点击 ✏️ 进入 textarea 编辑，`Ctrl/⌘ + Enter` 保存、`Esc` 取消。
+- **数据**：来自会话 `goal` 投影（`createdAt` 起算用时每秒刷新；轮次 = `roundsStarted/maxGoalRounds`）；变更动词（`pause` / `resume` / `edit` / `clear`）走 `remote.goals`，CAS ref 调用时现读。
+
 ## 安装
 
 > 需要 DSH Desktop（或支持 `dsh plugin add` 的 DSH 安装）。插件作为 profile bundle 安装。
@@ -35,7 +42,15 @@ dsh plugin add @lyhue1991/dsh-tree
 
 ## 更新日志
 
-### 0.1.5（当前）
+### 0.1.8（当前）
+
+- **目标卡片（Goal 卡片）**：参考 pi-web GoalPanel 设计，把默认的一行 GoalBar 升级为卡片式两行展示（状态圆点 + 相位标签 + `用时 · 轮次` meta + 完整多行 objective + 编辑/暂停/恢复/清除）。通过 `conversation.input.dock` 槽位同 id `goal` + 更低 priority（-1）**原生遮蔽**默认实现，不改 DSH 源码；变更动词走 `remote.goals`（CAS ref 调用时现读）。
+
+### 0.1.7
+
+- **速度徽标稳定化**：徽标贴附 Deep diving 状态行（DOM 注入 + MutationObserver），使用 `-webkit-text-fill-color` + `important` 修复 `background-clip: text` 渐变对子元素颜色的影响；已挂载快路径避免重复扫描；徽标始终跟随 Deep diving 的 15s 计时。
+
+### 0.1.5
 
 - **跨平台**：`move` / `create` / `upload` 改用 `node:fs/promises`（macOS / Linux / Windows 通用，消除 shell 命令依赖与注入面）；`open` / `trash` 按平台分支选命令（见下方「平台」表）。
 - **模型吞吐徽标**：输入框正上方显示「正在等待模型...」（省略号 1→2→3 循环）与彩色 `t/s` 徽标，数据来自 `llm/stream` 真实流。
