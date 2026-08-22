@@ -1,7 +1,7 @@
 {
   "name": "@lyhue1991/dsh-tree",
-  "description": "DSH 项目资源管理器：右侧 details 列文件树（并列网格、宽度与左侧工作区一致 264-420px），Session log 右侧 📁 切换按钮；支持多选、双击展开/打开、右键菜单（系统打开/重命名/废纸篓/新建/复制路径）、拖拽移动、上传。附带模型吞吐徽标：输入框正上方显示「正在等待模型...」与彩色 t/s 徽标（数据来自 llm/stream 真实流）。附带目标卡片：参考 pi-web GoalPanel 把默认 GoalBar 升级为卡片式（状态圆点/相位/用时·轮次/完整 objective/编辑暂停恢复清除）。",
-  "version": "0.1.8",
+  "description": "DSH 项目资源管理器：右侧 details 列文件树（并列网格、宽度与左侧工作区一致 264-420px），Session log 右侧 📁 切换按钮；支持多选、双击展开/打开、右键菜单（系统打开/重命名/废纸篓/新建/复制路径）、拖拽移动、上传。附带模型吞吐徽标：输入框正上方显示「正在等待模型...」与彩色 t/s 徽标（数据来自 llm/stream 真实流）。附带目标卡片与 goal 工具替换：参考 pi-codex/pi-web 把原生轮数预算改为 token 预算（create_goal/get_goal/update_goal 遮蔽原生，budget_limited 自动暂停，卡片显示用时·token 用量）。",
+  "version": "0.1.9",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
