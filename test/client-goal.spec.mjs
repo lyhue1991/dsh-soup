@@ -95,6 +95,13 @@ function attrList(node, out = []) {
   if (node && node.children) attrList(node.children, out)
   return out
 }
+function buttonByLabel(node, label, out = []) {
+  if (node == null || node === false || node === true) return out
+  if (Array.isArray(node)) { for (const child of node) buttonByLabel(child, label, out); return out }
+  if (node.props && node.props.type === 'button' && flattenText(node).join('') === label) out.push(node)
+  if (node.children) buttonByLabel(node.children, label, out)
+  return out
+}
 
 // ---- 场景 1：active goal，token 预算/用量 meta ----
 function seedGoal(phase, extra) {
@@ -175,5 +182,23 @@ const card6 = renderCard({ sessionId: 's1' })
 const text6 = flattenText(card6).join(' · ')
 if (!text6.includes('无上限')) throw new Error('edit view should show 无上限: ' + text6)
 if (!text6.includes('保存')) throw new Error('edit view should show 保存')
+
+// ---- 场景 7：无效预算不发起请求，显示明确错误 ----
+let invalidBudgetError = null
+resetHooks([
+  [{ goal: { id: 'g1', revision: 3, objective: '目标', phase: 'active', tokenBudget: 1000, tokensUsed: 1, timeUsedSeconds: 5, activation: 'armed' } }, () => {}],
+  [true, () => {}],
+  ['目标', () => {}],
+  ['1.5', () => {}],
+  [false, () => {}],
+  [false, () => {}],
+  [null, (message) => { invalidBudgetError = message }],
+  { current: false },
+])
+const invalidCard = renderCard({ sessionId: 's1' })
+buttonByLabel(invalidCard, '保存')[0].props.onClick()
+if (!invalidBudgetError || !invalidBudgetError.includes('正整数')) {
+  throw new Error('invalid budget should show positive-integer error, got ' + invalidBudgetError)
+}
 
 console.log('CLIENT GOAL OK: token meta, status labels, button state machine, no-goal/loading null, edit view')

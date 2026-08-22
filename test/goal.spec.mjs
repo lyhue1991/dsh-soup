@@ -5,7 +5,7 @@
 import { apply } from '../lib/index.js'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 
 const WORK = join(tmpdir(), 'dsh-tree-goal-' + process.pid + '-' + Date.now())
 await mkdir(WORK, { recursive: true })
@@ -19,6 +19,7 @@ const goalsStore = new Map() // agentId -> { goal, activation }
 function makeAgent(id, events) {
   return {
     id,
+    status: 'running',
     session: { events: events || [] },
     ctx: {
       tools: {
@@ -43,7 +44,13 @@ const agentB = makeAgent('a2', [
 
 const agents = {
   _map: new Map([['a1', agentA], ['a2', agentB]]),
-  get: (id) => agents._map.get(id),
+  _current: agentA,
+  get: (id) => {
+    const agent = agents._map.get(id)
+    if (agent) agents._current = agent
+    return agent
+  },
+  currentInitiator: () => agents._forcedCurrent || agents._current,
   roots: () => [...agents._map.values()],
 }
 
@@ -53,7 +60,7 @@ const goals = {
   create: (agent, req) => {
     const prev = goalsStore.get(agent.id)
     if (prev && prev.goal.phase !== 'complete') throw new Error('goal exists')
-    const goal = { id: 'g-' + agent.id, revision: 1, objective: req.objective, phase: 'active', maxGoalRounds: req.maxGoalRounds, blockedReason: null }
+    const goal = { id: 'g-' + agent.id, revision: 1, objective: req.objective, phase: 'active', maxGoalRounds: req.maxGoalRounds, roundsStarted: 0, createdAt: Date.now(), blockedReason: null }
     goalsStore.set(agent.id, { goal, activation: 'armed' })
     return { ...goal, activation: 'armed' }
   },
@@ -155,6 +162,18 @@ function call(body) {
   return new Promise((r) => setTimeout(() => r(res), 20))
 }
 
+function callRoute(route, body) {
+  const res = { writeHead: (code) => { res.code = code }, end: (data) => { res.body = JSON.parse(data) } }
+  const payload = JSON.stringify(body)
+  route.handler({
+    on: (event, fn) => {
+      if (event === 'data') setTimeout(() => fn(Buffer.from(payload)), 0)
+      if (event === 'end') setTimeout(() => fn(), 1)
+    },
+  }, res)
+  return new Promise(resolve => setTimeout(() => resolve(res.body), 20))
+}
+
 async function drain(stream) { for await (const _c of stream) { /* drain */ } }
 
 // ---- create_goal：token 预算 + 原生巨大轮数 ----
@@ -203,15 +222,21 @@ agents._map.set('a5', agentC)
 for (const fn of createdListeners) fn({ agent: agentC })
 const cc = await createDef.execute({ objective: 'C目标', token_budget: null }, { agent: agentC })
 if (!cc.goal || cc.goal.phase !== 'active') throw new Error('create C failed: ' + JSON.stringify(cc))
+// 不匹配的 goal 续轮不能完成目标
+agentC.session.events = [{ type: 'turn/start', turn: 2 }, { type: 'user/message', data: { source: { kind: 'goal', goalId: 'wrong', revision: cc.goal.revision, round: 0 } } }]
+let wrongRound = false
+try { await updDef.execute({ goal_id: cc.goal.id, revision: cc.goal.revision, action: 'complete' }, { agent: agentC }) } catch (e) { wrongRound = true }
+if (!wrongRound) throw new Error('non-matching goal round should not authorize complete')
 // 换成 goal 轮：complete 应允许（goal round 授权）
-agentC.session.events = [{ type: 'turn/start', turn: 2 }, { type: 'user/message', data: { source: { kind: 'goal' } } }]
+agentC.session.events = [{ type: 'turn/start', turn: 2 }, { type: 'user/message', data: { source: { kind: 'goal', goalId: cc.goal.id, revision: cc.goal.revision, round: 0 } } }]
 const comp = await updDef.execute({ goal_id: cc.goal.id, revision: cc.goal.revision, action: 'complete' }, { agent: agentC })
 if (comp.goal.phase !== 'complete') throw new Error('complete failed: ' + JSON.stringify(comp.goal))
 // complete 后可再 create（换回 direct human）
 agentC.session.events = [{ type: 'turn/start', turn: 3 }, { type: 'user/message', data: { source: { kind: 'user' } } }]
 const cc2 = await createDef.execute({ objective: 'C2目标' }, { agent: agentC })
 // blocked：goal 轮授权
-agentC.session.events = [{ type: 'turn/start', turn: 4 }, { type: 'user/message', data: { source: { kind: 'goal' } } }]
+goalsStore.get('a5').goal.roundsStarted = 3
+agentC.session.events = [{ type: 'turn/start', turn: 4 }, { type: 'user/message', data: { source: { kind: 'goal', goalId: cc2.goal.id, revision: cc2.goal.revision, round: 3 } } }]
 const blocked = await updDef.execute({ goal_id: cc2.goal.id, revision: cc2.goal.revision, action: 'blocked', blocked_reason: '卡住了' }, { agent: agentC })
 if (blocked.goal.phase !== 'blocked') throw new Error('blocked failed: ' + JSON.stringify(blocked.goal))
 // blocked 后无 direct human 也无 goal 轮 → complete 拒绝
@@ -227,6 +252,12 @@ for (const fn of createdListeners) fn({ agent: agentNH })
 let nh = false
 try { await createDef.execute({ objective: 'x' }, { agent: agentNH }) } catch (e) { nh = true }
 if (!nh) throw new Error('create_goal without direct human should throw')
+// 非 current initiator 的精确 registry agent 也不能调用
+agents._forcedCurrent = agentA
+let wrongInitiator = false
+try { await createDef.execute({ objective: 'x' }, { agent: agentNH }) } catch (e) { wrongInitiator = true }
+agents._forcedCurrent = undefined
+if (!wrongInitiator) throw new Error('non-current initiator should be rejected')
 // 不在 registry 的 agent → 拒绝
 let off = false
 try { await createDef.execute({ objective: 'x' }, { agent: makeAgent('ghost', []) }) } catch (e) { off = true }
@@ -244,6 +275,12 @@ if (gd.goal.phase !== 'budget_limited') throw new Error('expected budget_limited
 let rs = false
 try { await updDef.execute({ goal_id: gd.goal.id, revision: gd.goal.revision, action: 'resume' }, { agent: agentD }) } catch (e) { rs = true }
 if (!rs) throw new Error('resume with exhausted budget should throw')
+
+// edit 无效预算必须在原生 objective 变更前失败
+let invalidEdit = false
+try { await updDef.execute({ goal_id: gd.goal.id, revision: gd.goal.revision, action: 'edit', objective: '不应保存', token_budget: 1.5 }, { agent: agentD }) } catch (e) { invalidEdit = true }
+if (!invalidEdit) throw new Error('invalid edit budget should throw')
+if (goalsStore.get('a4').goal.objective !== 'D') throw new Error('invalid edit must not mutate objective')
 
 // ---- bridge goal-view / goal-action ----
 const v1 = await call({ action: 'goal-view', args: { sessionId: 'a1' } })
@@ -269,6 +306,33 @@ if (ev.body.goal.objective !== '改过的目标') throw new Error('objective not
 if (ev.body.goal.phase !== 'paused') throw new Error('after budget raise a4 should be paused: ' + JSON.stringify(ev.body.goal))
 const rv = await call({ action: 'goal-action', args: { sessionId: 'a4', action: 'resume' } })
 if (!rv.body.ok || rv.body.goal.phase !== 'active') throw new Error('resume via bridge fail: ' + JSON.stringify(rv.body))
+// sidecar 持久化包含预算、用量与状态
+const persisted = JSON.parse(await readFile(join(WORK, '.dsh-tree-goals.json'), 'utf8'))
+if (!persisted.a4 || persisted.a4.tokenBudget !== 100 || persisted.a4.tokensUsed !== 10 || persisted.a4.status !== 'active') {
+  throw new Error('persisted goal state mismatch: ' + JSON.stringify(persisted.a4))
+}
+// 重新 apply 后从 sidecar 恢复 token 层
+let route2 = null
+const listeners2 = new Map()
+apply({
+  effect: fn => { const d = fn(); return () => { if (d) d() } },
+  on: (name, fn) => {
+    if (!listeners2.has(name)) listeners2.set(name, [])
+    listeners2.get(name).push(fn)
+    return () => {}
+  },
+  timer: { interval: () => () => {} },
+  webServer: { register: route => { route2 = route; return () => {} } },
+  fs: { resolve: async p => ({ displayPath: p }), listDir: async () => [] },
+  subprocess: { spawn: () => ({ done: Promise.resolve({ exitCode: 0 }) }) },
+  sandboxPolicy: { workspaceRoot: WORK },
+  sessions: { get: () => undefined },
+  agents, goals, tools: { register: () => () => {} },
+})
+const reloaded = await callRoute(route2, { action: 'goal-view', args: { sessionId: 'a4' } })
+if (!reloaded.ok || reloaded.goal.tokenBudget !== 100 || reloaded.goal.tokensUsed !== 10 || reloaded.goal.phase !== 'active') {
+  throw new Error('reloaded goal state mismatch: ' + JSON.stringify(reloaded))
+}
 
 // 未知操作报错
 const unk = await call({ action: 'goal-action', args: { sessionId: 'a4', action: 'nope' } })
