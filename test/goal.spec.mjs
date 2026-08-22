@@ -134,6 +134,15 @@ if (!registeredTools.has('create_goal') || !registeredTools.has('get_goal') || !
 }
 if (registeredTools.size !== 3) throw new Error('expected exactly 3 scoped tools, got ' + registeredTools.size)
 
+// 注册期 assertSupportedJsonSchema 要求**编译后**格式（每层顶层 required 数组，
+// 属性无内联 required: true）——原生 defineTool 先编译 DSL，这里手工编译。
+for (const name of ['create_goal', 'get_goal', 'update_goal']) {
+  const schema = registeredTools.get(name).output.schema
+  if (JSON.stringify(schema).includes('"required":true')) {
+    throw new Error(name + ' output.schema must be compiled form (no inline required: true)')
+  }
+}
+
 function call(body) {
   const res = { writeHead: (c, h) => { res.code = c; res.headers = h }, end: (b) => { res.body = JSON.parse(b) } }
   const payload = JSON.stringify(body)
