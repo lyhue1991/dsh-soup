@@ -1,7 +1,7 @@
-// dsh-tree GoalCard 客户端渲染测试：
-// 通过 slots.register 捕获 goal 卡片的渲染函数，直接调用并断言
-// token 预算 meta、状态标签、按钮状态机（active/paused/budget_limited/无目标/编辑态）。
-import { fileURLToPath } from 'node:url'
+// dsh-tree GoalBar 客户端渲染测试：
+// 验证多行 GoalBar（复用原生 goal projection + 动作动词）的展示与按钮状态机。
+// 测试场景：active / paused / blocked / 无目标 / 已完成 / 编辑态。
+import { readFileSync } from 'node:fs'
 
 // ---- 可编程 React stub：按 hook 顺序预置状态 ----
 let hookStates = []
@@ -39,13 +39,12 @@ globalThis.window.__ModuleLoader__ = { load: (spec) => { loadedFactory = spec.fa
 await import('../lib/client.js')
 if (!loadedFactory) throw new Error('module loader did not capture factory')
 
-let goalRender = null
-let applyCtx = null
 const factoryModule = loadedFactory((name) => {
   if (name === 'react') return React
   throw new Error('unexpected require: ' + name)
 })
-// apply 注册 goal 卡片到 slots
+
+// apply 注册 goal dock 到 slots
 const registered = []
 const ctx = {
   slots: {
@@ -56,28 +55,29 @@ const ctx = {
     },
   },
   layout: { isOpen: () => false },
+  sessions: { binding: () => ({ session: { projections: { faceOf: () => undefined } } }) },
+  remote: { goals: { edit: () => Promise.resolve({ ok: true }), pause: () => Promise.resolve({ ok: true }), resume: () => Promise.resolve({ ok: true }), clear: () => Promise.resolve({ ok: true }) } },
   timer: { interval: () => () => {} },
   effect: (fn) => { const d = fn(); return () => { if (d) d() } },
 }
-applyCtx = factoryModule.default || factoryModule.apply || (factoryModule.exports && factoryModule.exports.apply)
-if (!applyCtx && typeof factoryModule === 'function') applyCtx = factoryModule
-if (!applyCtx) throw new Error('apply not found in module exports')
-// 触发 apply（部分插件导出为 { apply }）
 const applyFn = factoryModule.apply || factoryModule.default
 if (applyFn) applyFn(ctx)
-else {
-  // 直接以函数形式导出时
-  applyCtx(ctx)
-}
-const goalReg = registered.find((r) => r.reg && r.reg.id === 'goal')
-if (!goalReg) throw new Error('goal card not registered')
-goalRender = goalReg.renderFn
+else throw new Error('apply not found')
 
-// 渲染辅助：renderFn 返回 React element descriptor {type: GoalCard, props}，需经 type() 出真实树
+const goalReg = registered.find((r) => r.reg && r.reg.id === 'goal')
+if (!goalReg) throw new Error('goal dock not registered')
+if (goalReg.reg.locale !== 'goal') throw new Error('goal dock must use native goal locale')
+const goalRender = goalReg.renderFn
+
+// 渲染辅助：goalRender 返回 { type: GoalDock, props }，递归调用直到得到原生 DOM 元素树
 function renderCard(props) {
-  const el = goalRender(props)
+  let el = goalRender(props)
   if (el === null) return null
-  return el.type(el.props)
+  // 递归展开函数组件（GoalDock -> GoalBar -> div）
+  while (el && typeof el.type === 'function') {
+    el = el.type(el.props)
+  }
+  return el
 }
 
 // ---- DOM 断言辅助 ----
@@ -85,6 +85,8 @@ function flattenText(node, out = []) {
   if (node == null || node === false || node === true) return out
   if (typeof node === 'string' || typeof node === 'number') { out.push(String(node)); return out }
   if (Array.isArray(node)) { for (const c of node) flattenText(c, out); return out }
+  // textarea/input 的值在 props.value 而非 children
+  if (node.props && typeof node.props.value === 'string') out.push(node.props.value)
   if (node.children) flattenText(node.children, out)
   return out
 }
@@ -95,110 +97,96 @@ function attrList(node, out = []) {
   if (node && node.children) attrList(node.children, out)
   return out
 }
-function buttonByLabel(node, label, out = []) {
+
+// ---- 默认 hook seed（editing=false, draft='', pending=false, error=null, cleared=null, pendingRef=false）----
+function defaultHooks() {
+  return [
+    [false, () => {}],  // editing
+    ['', () => {}],     // draft
+    [false, () => {}],  // pending
+    [null, () => {}],   // actionError
+    [null, () => {}],   // clearedGoalId
+    { current: false }, // pendingRef
+    { current: null },  // textareaRef
+  ]
+}
+
+// ---- 场景 1：active goal -> 显示标签 + objective + 暂停/编辑/清除 ----
+resetHooks(defaultHooks())
+const card1 = renderCard({ useProjection: () => ({ goal: { id: 'g1', revision: 1, objective: '完成目标', phase: 'active', maxGoalRounds: 10 }, roundsStarted: 2 }) })
+if (card1 === null) throw new Error('active goal should render')
+const text1 = flattenText(card1).join(' ')
+if (!text1.includes('phase.active')) throw new Error('missing phase label: ' + text1)
+if (!text1.includes('2/10')) throw new Error('missing rounds meta: ' + text1)
+if (!text1.includes('完成目标')) throw new Error('missing objective: ' + text1)
+const labels1 = attrList(card1)
+if (!labels1.includes('action.pause')) throw new Error('active should show pause: ' + JSON.stringify(labels1))
+if (labels1.includes('action.resume')) throw new Error('active should NOT show resume')
+if (!labels1.includes('action.edit')) throw new Error('missing edit')
+if (!labels1.includes('action.clear')) throw new Error('missing clear')
+
+// ---- 场景 2：paused goal -> 恢复按钮，无暂停 ----
+resetHooks(defaultHooks())
+const card2 = renderCard({ useProjection: () => ({ goal: { id: 'g2', revision: 1, objective: '暂停目标', phase: 'paused' } }) })
+const labels2 = attrList(card2)
+if (!labels2.includes('action.resume')) throw new Error('paused should show resume: ' + JSON.stringify(labels2))
+if (labels2.includes('action.pause')) throw new Error('paused should NOT show pause')
+
+// ---- 场景 3：blocked goal -> 无暂停/恢复，有编辑/清除 ----
+resetHooks(defaultHooks())
+const card3 = renderCard({ useProjection: () => ({ goal: { id: 'g3', revision: 1, objective: '受阻目标', phase: 'blocked', blockedReason: { code: 'test', message: '原因' } } }) })
+const labels3 = attrList(card3)
+if (labels3.includes('action.pause') || labels3.includes('action.resume')) throw new Error('blocked should have no pause/resume: ' + JSON.stringify(labels3))
+if (!labels3.includes('action.edit')) throw new Error('blocked should show edit')
+
+// ---- 场景 4：无目标 -> null ----
+resetHooks(defaultHooks())
+const card4 = renderCard({ useProjection: () => null })
+if (card4 !== null) throw new Error('null goal should render nothing')
+
+// ---- 场景 5：已完成 -> null ----
+resetHooks(defaultHooks())
+const card5 = renderCard({ useProjection: () => ({ goal: { id: 'g5', revision: 1, objective: '完成', phase: 'complete' } }) })
+if (card5 !== null) throw new Error('complete goal should render nothing')
+
+// ---- 场景 6：编辑态 -> textarea + 保存/取消 ----
+resetHooks([
+  [true, () => {}],   // editing = true
+  ['编辑中的目标', () => {}], // draft
+  [false, () => {}],  // pending
+  [null, () => {}],   // actionError
+  [null, () => {}],   // clearedGoalId
+  { current: false }, // pendingRef
+  { current: null },  // textareaRef
+])
+const card6 = renderCard({ useProjection: () => ({ goal: { id: 'g6', revision: 1, objective: '旧目标', phase: 'active' } }) })
+const text6 = flattenText(card6).join(' ')
+if (!text6.includes('编辑中的目标')) throw new Error('edit view should show draft: ' + text6)
+const labels6 = attrList(card6)
+if (!labels6.includes('action.save')) throw new Error('edit view should show save: ' + JSON.stringify(labels6))
+if (!labels6.includes('action.cancel')) throw new Error('edit view should show cancel: ' + JSON.stringify(labels6))
+
+// ---- 场景 6b：编辑框自动增高，无自身滚动条 / 拖拽块 ----
+function findNodeByType(node, type, out = []) {
   if (node == null || node === false || node === true) return out
-  if (Array.isArray(node)) { for (const child of node) buttonByLabel(child, label, out); return out }
-  if (node.props && node.props.type === 'button' && flattenText(node).join('') === label) out.push(node)
-  if (node.children) buttonByLabel(node.children, label, out)
+  if (Array.isArray(node)) { for (const child of node) findNodeByType(child, type, out); return out }
+  if (node.type === type) out.push(node)
+  if (node.children) findNodeByType(node.children, type, out)
   return out
 }
+const textarea6 = findNodeByType(card6, 'textarea')[0]
+if (!textarea6 || !textarea6.props.ref) throw new Error('edit textarea should use an auto-height ref')
+const clientSource = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+if (!clientSource.includes('resize:none;overflow:hidden')) throw new Error('edit textarea must disable resize and scrollbar')
+if (!clientSource.includes('Math.max(64, input.scrollHeight)')) throw new Error('edit textarea must grow from scrollHeight')
 
-// ---- 场景 1：active goal，token 预算/用量 meta ----
-function seedGoal(phase, extra) {
-  resetHooks([
-    [{ goal: Object.assign({
-      id: 'g1', revision: 3, objective: '完成目标', phase,
-      tokenBudget: 100000, tokensUsed: 1200, timeUsedSeconds: 65,
-      blockedReason: null, activation: 'armed',
-    }, extra || {}) }, () => {}],
-    [false, () => {}],   // editing
-    ['', () => {}],      // draft
-    ['', () => {}],      // budgetDraft
-    [false, () => {}],   // unlimited
-    [false, () => {}],   // pending
-    [null, () => {}],    // error
-    { current: false },  // pendingRef
-  ])
-}
+// ---- 场景 7：多行 objective 不被截断（无 text-overflow:ellipsis）----
+resetHooks(defaultHooks())
+const longObjective = '第一行\n第二行\n第三行'
+const card7 = renderCard({ useProjection: () => ({ goal: { id: 'g7', revision: 1, objective: longObjective, phase: 'active' } }) })
+const text7 = flattenText(card7).join(' ')
+if (!text7.includes('第一行')) throw new Error('multi-line objective missing line 1: ' + text7)
+if (!text7.includes('第二行')) throw new Error('multi-line objective missing line 2: ' + text7)
+if (!text7.includes('第三行')) throw new Error('multi-line objective missing line 3: ' + text7)
 
-seedGoal('active')
-const card = renderCard({ sessionId: 's1' })
-if (card === null) throw new Error('active goal should render a card')
-const text = flattenText(card).join(' · ')
-if (!text.includes('进行中')) throw new Error('missing 进行中 label: ' + text)
-if (!text.includes('1m 5s')) throw new Error('missing elapsed 1m 5s: ' + text)
-if (!text.includes('1.2K / 100K t')) throw new Error('missing token meta 1.2K / 100K t: ' + text)
-if (!text.includes('完成目标')) throw new Error('missing objective text: ' + text)
-const labels = attrList(card)
-if (!labels.includes('暂停目标')) throw new Error('active goal should show pause button: ' + JSON.stringify(labels))
-if (labels.includes('恢复目标')) throw new Error('active goal should NOT show resume: ' + JSON.stringify(labels))
-if (!labels.includes('清除目标')) throw new Error('missing clear button')
-
-// ---- 场景 2：paused goal → 恢复按钮 ----
-seedGoal('paused')
-const card2 = renderCard({ sessionId: 's1' })
-const labels2 = attrList(card2)
-if (!labels2.includes('恢复目标')) throw new Error('paused should show resume: ' + JSON.stringify(labels2))
-if (labels2.includes('暂停目标')) throw new Error('paused should NOT show pause')
-
-// ---- 场景 3：budget_limited → 标签 + 无暂停/恢复按钮 ----
-seedGoal('budget_limited')
-const card3 = renderCard({ sessionId: 's1' })
-const text3 = flattenText(card3).join(' · ')
-if (!text3.includes('预算耗尽')) throw new Error('missing budget_limited label: ' + text3)
-const labels3 = attrList(card3)
-if (labels3.includes('暂停目标') || labels3.includes('恢复目标')) throw new Error('budget_limited should have no pause/resume: ' + JSON.stringify(labels3))
-if (!labels3.includes('编辑目标')) throw new Error('budget_limited should show edit')
-
-// ---- 场景 4：无目标 → null ----
-resetHooks([
-  [{ goal: null }, () => {}],
-  [false, () => {}], ['', () => {}], ['', () => {}], [false, () => {}], [false, () => {}], [null, () => {}],
-  { current: false },
-])
-if (renderCard({ sessionId: 's1' }) !== null) throw new Error('no-goal should render null')
-
-// ---- 场景 5：未加载（viewState null）→ null ----
-resetHooks([
-  [null, () => {}],
-  [false, () => {}], ['', () => {}], ['', () => {}], [false, () => {}], [false, () => {}], [null, () => {}],
-  { current: false },
-])
-if (renderCard({ sessionId: 's1' }) !== null) throw new Error('loading should render null')
-
-// ---- 场景 6：编辑态 → 含预算输入框与"无上限" ----
-seedGoal('active', { tokenBudget: null }) // 无上限目标
-resetHooks([
-  [{ goal: { id: 'g1', revision: 3, objective: '目标', phase: 'active', tokenBudget: null, tokensUsed: 900, timeUsedSeconds: 5, activation: 'armed' } }, () => {}],
-  [true, () => {}],   // editing
-  ['目标', () => {}], // draft
-  ['', () => {}],     // budgetDraft
-  [true, () => {}],   // unlimited
-  [false, () => {}],
-  [null, () => {}],
-  { current: false },
-])
-const card6 = renderCard({ sessionId: 's1' })
-const text6 = flattenText(card6).join(' · ')
-if (!text6.includes('无上限')) throw new Error('edit view should show 无上限: ' + text6)
-if (!text6.includes('保存')) throw new Error('edit view should show 保存')
-
-// ---- 场景 7：无效预算不发起请求，显示明确错误 ----
-let invalidBudgetError = null
-resetHooks([
-  [{ goal: { id: 'g1', revision: 3, objective: '目标', phase: 'active', tokenBudget: 1000, tokensUsed: 1, timeUsedSeconds: 5, activation: 'armed' } }, () => {}],
-  [true, () => {}],
-  ['目标', () => {}],
-  ['1.5', () => {}],
-  [false, () => {}],
-  [false, () => {}],
-  [null, (message) => { invalidBudgetError = message }],
-  { current: false },
-])
-const invalidCard = renderCard({ sessionId: 's1' })
-buttonByLabel(invalidCard, '保存')[0].props.onClick()
-if (!invalidBudgetError || !invalidBudgetError.includes('正整数')) {
-  throw new Error('invalid budget should show positive-integer error, got ' + invalidBudgetError)
-}
-
-console.log('CLIENT GOAL OK: token meta, status labels, button state machine, no-goal/loading null, edit view')
+console.log('CLIENT GOAL OK: phase labels, button state machine, no-goal/complete null, edit view, multi-line objective')

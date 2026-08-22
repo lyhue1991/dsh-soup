@@ -1,6 +1,6 @@
 # dsh-tree — DSH 项目资源管理器
 
-一个可安装的 DSH（DeepSeek Harness）插件：在会话右侧以**并列网格列**的形式提供项目文件树，与左侧工作区同款配色、同宽（默认 280px，可拖拽 264–420px）。并附带**模型吞吐徽标**（输入框正上方实时显示「正在等待模型...」与彩色 `t/s` 速率）与**目标卡片**（参考 pi-web 的 GoalPanel，把默认的一行 GoalBar 升级为卡片式展示）。**三平台通用**（macOS / Linux / Windows）。
+一个可安装的 DSH（DeepSeek Harness）插件：在会话右侧以**并列网格列**的形式提供项目文件树，与左侧工作区同款配色、同宽（默认 280px，可拖拽 264–420px）。并附带**模型吞吐徽标**（输入框正上方实时显示「正在等待模型...」与彩色 `t/s` 速率）与**GoalBar 多行展示**（把原生单行截断 GoalBar 放开为多行完整显示）。**三平台通用**（macOS / Linux / Windows）。
 
 ## 功能
 
@@ -20,21 +20,12 @@
 - **流式阶段**：token 计数（向下箭头）+ 彩色 `xx.x t/s` 徽标（≥50 青 / ≥30 绿 / ≥15 黄 / 其余红）。
 - **数据源**：Host 包 `llm/stream` waterfall 实时统计真实 chunk/token（优先 usage 的 `outputTokens`，退化 CJK 字符估算），比浏览器端估算更准。
 
-### 目标卡片（Goal 卡片）
-- 参考 **pi-web 的 GoalPanel** 设计，把 DSH 默认的一行 GoalBar 升级为**卡片式两行展示**（不改 DSH 源码，用 `conversation.input.dock` 槽位同 id + 更低 priority 原生遮蔽默认实现）。
-- **第一行**：状态圆点（进行中绿 / 已暂停琥珀 / 受阻橙红 / 预算耗尽红）+ 相位标签 + 右侧 meta（`用时 · 已用/上限 token`）+ 操作按钮（暂停 / 恢复 / 编辑 / 清除）。
-- **第二行**：完整 objective 多行展示（`pre-wrap` 换行，不再截断）。
-- **编辑**：点击 ✏️ 进入 textarea 编辑（可同时改 objective 与 token 预算，勾选「无上限」移除预算），`Ctrl/⌘ + Enter` 保存、`Esc` 取消。
-- **数据**：走 dsh-tree 桥（`goal-view` 轮询 / `goal-action` 变更），显示 token 预算/用量而非原生轮次。
-
-### Goal 工具替换（token 预算）
-参考 **pi-codex 的 goal**，把 DSH 原生 goal 的**轮数预算替换为 token 预算**——不动 DSH 源码，dsh-tree 在宿主半区实现并**遮蔽原生工具**：
-- **替换工具**：每个根 agent 作用域注册 `create_goal(objective, token_budget?)` / `get_goal()` / `update_goal(goal_id, revision, action, objective?, token_budget?, blocked_reason?)`，原生同名全局工具被遮蔽。`token_budget` 省略或传 `null` = 不设上限。
-- **核心复用**：目标/阶段/持久化/自动续轮仍由 DSH 原生 goal 服务驱动（创建时设巨大轮数上限，使轮数永不绑定）；dsh-tree 只在其上加一层 **token 记账与预算门禁**。
-- **记账**：包装 `llm/stream`，按流累计 `usage` 的真实 token（`input + output + cacheRead + cacheWrite`），无 usage 时回退输出估算；累计到该会话的 goal 账户。
-- **门禁**：`tokensUsed >= tokenBudget` → 状态变 `budget_limited` 并自动 `pause` 原生 goal（停止自动续轮）；`update_goal edit` 提高预算后 `resume` 可继续。
-- **安全**：`create_goal` 要求顶层 agent 的直接人类轮；`complete` / `blocked` 要求直接人类轮或当前 goal 续轮（近似原生 `requireDirectHuman` / `completionAuthority`）。
-- **桥**：新增 `goal-view`（读取合并后的 goal 视图）与 `goal-action`（pause / resume / complete / blocked / edit / clear）供卡片使用。
+### GoalBar 多行展示
+- 在 DSH 原生 GoalBar 基础上**仅调整展示**：把单行截断（`text-overflow: ellipsis`）放开为**多行完整显示**（`white-space: pre-wrap`），编辑控件从 `input` 改为 `textarea`。不改 DSH 源码，用 `conversation.input.dock` 槽位同 id + 更低 priority 遮蔽默认实现。
+- **数据与工具**：完全复用原生 goal projection 与原生 `create_goal` / `get_goal` / `update_goal` 工具，不替换、不遮蔽。
+- **操作按钮**：暂停 / 恢复 / 编辑 / 清除（与原生 GoalBar 一致）。
+- **轮次**：显示原生 goal projection 的 `roundsStarted/maxGoalRounds`。
+- **编辑**：点击 ✏️ 进入 textarea 编辑，`Ctrl/⌘ + Enter` 保存、`Esc` 取消。
 
 ## 安装
 
@@ -51,11 +42,10 @@ dsh plugin add @lyhue1991/dsh-tree
 
 ## 更新日志
 
-### 0.1.9（当前）
+### 0.1.10（当前）
 
-- **Goal 工具替换（token 预算）**：参考 pi-codex 的 goal，把 DSH 原生 goal 的**轮数预算替换为 token 预算**（不改 DSH 源码）。宿主半区在每根 agent 作用域注册 `create_goal` / `get_goal` / `update_goal` 遮蔽原生同名工具；`token_budget` 参数（省略/null = 不设上限）。复用原生 goal 服务的目标/阶段/持久化/自动续轮（创建时设巨大轮数上限），在其上加 token 记账层：包装 `llm/stream` 按流累计 `usage` 真实 token（input+output+cache），`tokensUsed >= tokenBudget` → `budget_limited` 并自动暂停原生 goal。权限近似原生 `requireDirectHuman` / `completionAuthority`。
-- **目标卡片升级**：meta 由「用时 · 轮次」改为「用时 · 已用/上限 token」，新增「预算耗尽」状态；编辑弹层可同时改 objective 与 token 预算（勾选「无上限」移除预算）；数据/动词从原生 `remote.goals` 迁移到 dsh-tree 桥（`goal-view` / `goal-action`）。
-- 新增桥动作 `goal-view`（合并 goal 视图）与 `goal-action`（pause / resume / complete / blocked / edit / clear）。
+- **简化 Goal**：移除自定义 `create_goal` / `get_goal` / `update_goal` 工具覆盖与 token 预算桥（`goal-view` / `goal-action`），改回使用 DSH 原生 goal 工具与 goal projection。
+- **GoalBar 多行展示**：把原生单行截断 GoalBar 放开为多行完整显示（`white-space: pre-wrap`），编辑控件从 `input` 改为 `textarea`，其余（按钮、动作、主题）与原生一致。
 
 ### 0.1.8
 
@@ -88,7 +78,7 @@ cd dsh-tree
 ## 实现说明
 
 - **宿主↔浏览器桥梁**：永久插件（profile bundle）不经过 dynamic runner，没有 `harness.handle`/`host.call`；宿主用 `webServer.register({ kind: 'exact', path: '/api/dsh-tree', handler })` 注册同源 HTTP 路由，浏览器用 `fetch` POST JSON 调用（`{ action, args }` 分派）。
-- **动作**：`root` / `sessionCwd` / `list` / `open` / `trash` / `move` / `create` / `upload` / `speed-status`（返回 `{ phase, tokens, tps, ttft }`）/ `goal-view`（合并后的 goal 视图，含 token 预算/用量）/ `goal-action`（pause / resume / complete / blocked / edit / clear）。
+- **动作**：`root` / `sessionCwd` / `list` / `open` / `trash` / `move` / `create` / `upload` / `speed-status`（返回 `{ phase, tokens, tps, ttft }`）。
 - **跨平台**：`move` / `create` / `upload` 直接用 `node:fs/promises`（`rename`/`mkdir`/`writeFile`），mac/Linux/Windows 通用、无 shell 注入面；仅 `open` / `trash` 这类「唤起系统」的动作按 `process.platform` 分支选命令（见下表）。
 - **吞吐统计**：`ctx.on('llm/stream', ...)` 包装 waterfall，按会话（`sessionId`/`agent.id`/`meta` 探测）维护 `{ phase: waiting|streaming|done, tokens, tps, ttft }`；首 chunk 到达标记 streaming（TTFT），结束后 4s 清除；`speed-status` 查询时按流开始累计秒数算平均 t/s（0.5s 暖机）。等待态文字用主题 token `--dsw-alias-label-caption`（与 shell 计时同款灰）。
 - **宽度接管**：MutationObserver 监听 shell 框架的 `grid-template-columns`，把 details 轨改写为插件宽度（264–420px），并在 shell 重渲染后保持；`[data-side="details"]` 隐藏 shell 自带手柄，改用面板左缘自定义拖拽手柄。
