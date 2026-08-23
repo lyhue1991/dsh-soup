@@ -1,5 +1,6 @@
-// dsh-tree GoalBar 客户端渲染测试：
-// 验证多行 GoalBar（复用原生 goal projection + 动作动词）的展示与按钮状态机。
+// dsh-tree 客户端渲染测试：
+// 验证 Session log 与空白会话两处资源管理器入口，以及多行 GoalBar
+// （复用原生 goal projection + 动作动词）的展示与按钮状态机。
 // 测试场景：active / paused / blocked / 无目标 / 已完成 / 编辑态。
 import { readFileSync } from 'node:fs'
 
@@ -25,6 +26,11 @@ const React = {
     return hookStates[i]
   },
   useEffect: (fn, deps) => { effects.push({ fn, deps }) },
+  useReducer: (reducer, initial) => {
+    const i = hookIndex++
+    if (hookStates[i] === undefined) hookStates[i] = [initial, () => {}]
+    return hookStates[i]
+  },
 }
 function resetHooks(seed) {
   hookStates = seed
@@ -68,6 +74,55 @@ const goalReg = registered.find((r) => r.reg && r.reg.id === 'goal')
 if (!goalReg) throw new Error('goal dock not registered')
 if (goalReg.reg.locale !== 'goal') throw new Error('goal dock must use native goal locale')
 const goalRender = goalReg.renderFn
+
+// ---- 资源管理器入口：普通会话在 Session log 右侧 ----
+const headerToggle = registered.find((r) => r.reg && r.reg.id === 'dsh-tree-toggle')
+if (!headerToggle) throw new Error('session-header explorer toggle not registered')
+if (headerToggle.reg.name !== 'conversation.session.header.utilities') {
+  throw new Error('explorer toggle must use conversation.session.header.utilities')
+}
+resetHooks([false, { current: null }])
+const headerComponent = headerToggle.renderFn({
+  sessionId: 's1',
+  useSessions: (selector) => selector({ byId: { s1: { cwd: '/tmp/demo' } } }),
+})
+const headerElement = headerComponent.type(headerComponent.props)
+if (!headerElement.props.className.includes('expl-tool')) {
+  throw new Error('session-header explorer toggle must keep toolbar styling')
+}
+if (headerElement.props['aria-label'] !== '项目资源管理器') {
+  throw new Error('session-header explorer toggle is missing its accessible label')
+}
+
+// ---- 资源管理器入口：空白会话在输入框上方、控件行右端 ----
+const heroToggle = registered.find((r) => r.reg && r.reg.id === 'dsh-tree-hero-toggle')
+if (!heroToggle) throw new Error('hero explorer toggle not registered')
+if (heroToggle.reg.name !== 'conversation.input.dock') {
+  throw new Error('hero explorer toggle must use conversation.input.dock')
+}
+const renderHero = (session) => {
+  resetHooks([false])
+  const component = heroToggle.renderFn({
+    sessionId: 's1',
+    session,
+    useSessions: (selector) => selector({ byId: { s1: { cwd: '/tmp/demo' } } }),
+  })
+  return component.type(component.props)
+}
+const heroElement = renderHero({
+  blank: true,
+  composerPhase: 'blank',
+  cwd: '/tmp/demo',
+})
+if (!heroElement || heroElement.props.className !== 'expl-hero-dock') {
+  throw new Error('blank session needs the hero explorer dock')
+}
+if (!heroElement.children[0].props.className.includes('expl-tool')) {
+  throw new Error('hero explorer toggle must use toolbar styling')
+}
+if (renderHero({ blank: false, composerPhase: 'active', cwd: '/tmp/demo' }) !== null) {
+  throw new Error('hero explorer toggle must hide once Session log exists')
+}
 
 // 渲染辅助：goalRender 返回 { type: GoalDock, props }，递归调用直到得到原生 DOM 元素树
 function renderCard(props) {
@@ -179,6 +234,12 @@ if (!textarea6 || !textarea6.props.ref) throw new Error('edit textarea should us
 const clientSource = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
 if (!clientSource.includes('resize:none;overflow:hidden')) throw new Error('edit textarea must disable resize and scrollbar')
 if (!clientSource.includes('Math.max(64, input.scrollHeight)')) throw new Error('edit textarea must grow from scrollHeight')
+if (!clientSource.includes('calc(var(--dsh-composer-side-clearance) + 12px)')) {
+  throw new Error('hero explorer toggle must clear the input card corner')
+}
+if (!clientSource.includes('function setHeroDetailsWidth') || !clientSource.includes('setHeroDetailsWidth(event.currentTarget, DETAILS_DEFAULT)')) {
+  throw new Error('hero explorer toggle must open the blank-session details grid directly')
+}
 
 // ---- 场景 7：多行 objective 不被截断（无 text-overflow:ellipsis）----
 resetHooks(defaultHooks())
