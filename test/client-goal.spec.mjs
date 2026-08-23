@@ -45,8 +45,13 @@ globalThis.window.__ModuleLoader__ = { load: (spec) => { loadedFactory = spec.fa
 await import('../lib/client.js')
 if (!loadedFactory) throw new Error('module loader did not capture factory')
 
+// ui-primitives 桩：验证 dsh-tree 对 MarkdownText 的可选接线
+function MarkdownTextStub(props) {
+  return { type: 'div', props: { className: 'md-stub', children: [props.text] } }
+}
 const factoryModule = loadedFactory((name) => {
   if (name === 'react') return React
+  if (name === '@deepseek-ai/dsh-client-ui-primitives') return { MarkdownText: MarkdownTextStub }
   throw new Error('unexpected require: ' + name)
 })
 
@@ -240,6 +245,11 @@ if (!clientSource.includes('calc(var(--dsh-composer-side-clearance) + 12px)')) {
 if (!clientSource.includes('function setHeroDetailsWidth') || !clientSource.includes('setHeroDetailsWidth(event.currentTarget, DETAILS_DEFAULT)')) {
   throw new Error('hero explorer toggle must open the blank-session details grid directly')
 }
+const closeLabelIndex = clientSource.indexOf("'aria-label': '关闭资源管理器'")
+const closeHandlerSource = clientSource.slice(Math.max(0, closeLabelIndex - 500), closeLabelIndex)
+if (closeLabelIndex < 0 || !closeHandlerSource.includes('layout.closeDetails()') || !closeHandlerSource.includes('setHeroDetailsWidth(event.currentTarget, 0)')) {
+  throw new Error('explorer close button must also close the blank-session details grid directly')
+}
 
 // ---- 场景 7：多行 objective 不被截断（无 text-overflow:ellipsis）----
 resetHooks(defaultHooks())
@@ -250,4 +260,36 @@ if (!text7.includes('第一行')) throw new Error('multi-line objective missing 
 if (!text7.includes('第二行')) throw new Error('multi-line objective missing line 2: ' + text7)
 if (!text7.includes('第三行')) throw new Error('multi-line objective missing line 3: ' + text7)
 
-console.log('CLIENT GOAL OK: phase labels, button state machine, no-goal/complete null, edit view, multi-line objective')
+// ---- 文件标签页：只读预览（无编辑/保存），四种格式渲染器接线 ----
+if (clientSource.includes("rpc('write'")) throw new Error('preview-only: client must not call write')
+if (clientSource.includes("action: 'write'")) throw new Error('preview-only: no write action usage')
+if (!clientSource.includes("sandbox: 'allow-scripts allow-popups allow-forms allow-modals'")) throw new Error('html preview must sandbox scripts without allow-same-origin')
+if (!clientSource.includes('srcDoc')) throw new Error('html preview must inject via srcDoc')
+if (!clientSource.includes('function parseDelimited')) throw new Error('csv preview needs the RFC4180 parser')
+if (!clientSource.includes('function previewKind')) throw new Error('preview dispatch by extension missing')
+if (!clientSource.includes('jsonColorNodes')) throw new Error('json preview colorizer missing')
+if (!clientSource.includes('create(MarkdownText, { text: props.text })')) throw new Error('markdown preview must reuse DSH MarkdownText')
+if (!clientSource.includes('create(CodeBlock, { code: entry.content, lang: lang })')) throw new Error('code preview must reuse DSH CodeBlock (shiki)')
+if (!clientSource.includes("py: 'py', rb: 'rb', go: 'go', rs: 'rs'")) throw new Error('code language table must cover common languages')
+if (!clientSource.includes('CODE_HIGHLIGHT_MAX_CHARS')) throw new Error('code highlight needs a size guard')
+if (!clientSource.includes("CSV_MAX_ROWS = 500")) throw new Error('csv preview must cap rendered rows')
+if (!clientSource.includes('FILES_MAX_OPEN = 5')) throw new Error('preview tabs must cap at 5 (FIFO)')
+if (!clientSource.includes('function pruneFilesToScope')) throw new Error('session switch must prune out-of-scope previews')
+if (!clientSource.includes('pruneFilesToScope(state.files, cwd)')) throw new Error('trackSession must apply scope pruning')
+if (!clientSource.includes('function NotebookPreview')) throw new Error('ipynb preview component missing')
+if (!clientSource.includes("ext === 'ipynb'")) throw new Error('previewKind must map .ipynb to notebook')
+if (!clientSource.includes('function iconSvgFor')) throw new Error('jupyterlab-style icon resolver missing')
+if (!clientSource.includes('node.open ? NB_SVG.folderFavorite : NB_SVG.folder')) throw new Error('directory icon must switch on expanded state')
+if (!clientSource.includes('folderFavorite: ')) throw new Error('folder-favorite svg missing')
+if (!clientSource.includes('jp-notebook-icon-color')) throw new Error('notebook filetype svg (JupyterLab) missing')
+if (!clientSource.includes('dangerouslySetInnerHTML: { __html: iconSvgFor(node) }')) throw new Error('tree rows must render svg icons')
+if (!clientSource.includes('.expl-icon svg{width:16px;height:16px;display:block;}')) throw new Error('svg icon sizing css missing')
+if (!clientSource.includes('function nbPickMime')) throw new Error('notebook output mime preference missing')
+
+
+
+
+const indexSource = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
+if (!indexSource.includes('NB_MAX_BYTES = 20 * 1024 * 1024')) throw new Error('notebook cap must be 20MB')
+
+console.log('CLIENT GOAL OK: phase labels, button state machine, no-goal/complete null, edit view, multi-line objective, files preview-only(md/html/json/csv)')
