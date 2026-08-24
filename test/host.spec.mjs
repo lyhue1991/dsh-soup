@@ -10,6 +10,7 @@ await mkdir(WORK, { recursive: true })
 
 let captured = null
 let dlCaptured = null
+let imgCaptured = null
 let streamListener = null
 let spawned = []
 // 会话表：s1 指向 WORK；后续用例可动态加入其他 cwd，验证「会话目录成为允许基」
@@ -22,6 +23,7 @@ const ctx = {
   timer: { interval: () => () => {} },
   webServer: { register: (route) => {
     if (route.path === '/api/dsh-soup/dl') { dlCaptured = route.handler; return () => {} }
+    if (route.path === '/api/dsh-soup/img') { imgCaptured = route.handler; return () => {} }
     captured = route
     return () => { captured = null }
   } },
@@ -384,6 +386,34 @@ if (decayed.body.phase !== 'waiting' || decayed.body.tps !== 0) {
 releaseBurst()
 try { await it5.return() } catch {}
 
+// ---- markdown 内联图片路由：GET /api/dsh-soup/img ----
+if (!imgCaptured) throw new Error('img route not registered')
+function callImg(p, extraHeaders = {}) {
+  const res = {
+    writeHead: (c, h) => { res.code = c; res.headers = h },
+    setHeader: (k, v) => { res.headers = Object.assign({}, res.headers, { [k]: v }) },
+    end: (b) => { res.body = b },
+  }
+  imgCaptured({
+    method: 'GET',
+    url: '/api/dsh-soup/img?p=' + encodeURIComponent(p),
+    headers: Object.assign({ host: GOOD_HEADERS.host }, extraHeaders),
+  }, res)
+  return new Promise((r) => setTimeout(() => r(res), 20))
+}
+const pngBuf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+await writeFile(join(WORK, 'tiny.png'), pngBuf)
+const imgOk = await callImg(join(WORK, 'tiny.png'))
+if (imgOk.code !== 200) throw new Error('img expected 200, got ' + imgOk.code)
+if (imgOk.headers['content-type'] !== 'image/png') throw new Error('img content-type: ' + imgOk.headers['content-type'])
+if (!Buffer.isBuffer(imgOk.body) || !imgOk.body.equals(pngBuf)) throw new Error('img body mismatch, got ' + String(imgOk.body && imgOk.body.length))
+const imgOut = await callImg(secretPath)
+if (imgOut.code !== 403) throw new Error('img out-of-root must 403, got ' + imgOut.code)
+const imgTxt = await callImg(join(WORK, 'bin.dat'))
+if (imgTxt.code !== 415) throw new Error('img non-image must 415, got ' + imgTxt.code)
+const imgCross = await callImg(join(WORK, 'tiny.png'), { 'sec-fetch-site': 'cross-site' })
+if (imgCross.code !== 403) throw new Error('img cross-site must 403, got ' + imgCross.code)
+
 await rm(WORK, { recursive: true, force: true })
 await rm(OUT, { recursive: true, force: true })
-console.log('SMOKE OK: root, sessionCwd, create, upload, move(no-shell), list, open, trash, guard, read(text/image/binary/dir-miss), write-removed(preview-only), speed idle/waiting/streaming-tps/done/stall, gate(origin/header/method), confine(out-of-root/traversal/symlink/session-base)')
+console.log('SMOKE OK: root, sessionCwd, create, upload, move(no-shell), list, open, trash, guard, read(text/image/binary/dir-miss), write-removed(preview-only), speed idle/waiting/streaming-tps/done/stall, gate(origin/header/method), confine(out-of-root/traversal/symlink/session-base), img(200/png-bytes/out-403/non-image-415/cross-site-403)')
