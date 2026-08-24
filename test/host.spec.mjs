@@ -268,6 +268,16 @@ const rdPdf = await call({ action: 'read', args: { path: pdfPath } })
 if (!rdPdf.body.ok || rdPdf.body.kind !== 'pdf') throw new Error('pdf read must be kind=pdf: ' + JSON.stringify(rdPdf.body))
 if (!String(rdPdf.body.data).startsWith('JVBER')) throw new Error('pdf base64 must round-trip')
 
+const dlPath = join(WORK, 'dl.bin')
+await writeFile(dlPath, Buffer.from([0x01, 0x02, 0x03, 0xff]))
+const dl = await call({ action: 'download', args: { path: dlPath } })
+if (!dl.body.ok || dl.body.name !== 'dl.bin') throw new Error('download fail: ' + JSON.stringify(dl.body))
+if (Buffer.from(dl.body.data, 'base64').toString('hex') !== '010203ff') throw new Error('download bytes mismatch')
+const dlDir = await call({ action: 'download', args: { path: join(WORK, 'subdir') } })
+if (dlDir.body.ok) throw new Error('directory download must fail')
+const dlOut = await call({ action: 'download', args: { path: secretPath } })
+if (dlOut.body.ok || dlOut.code !== 403) throw new Error('out-of-root download must 403')
+
 const dirRead = await call({ action: 'read', args: { path: WORK } })
 if (dirRead.body.ok) throw new Error('directory read should fail')
 

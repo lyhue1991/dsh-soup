@@ -284,6 +284,9 @@ if (!clientSource.includes('folderFavorite: ')) throw new Error('folder-favorite
 if (!clientSource.includes('jp-notebook-icon-color')) throw new Error('notebook filetype svg (JupyterLab) missing')
 if (!clientSource.includes('dangerouslySetInnerHTML: { __html: iconSvgFor(node) }')) throw new Error('tree rows must render svg icons')
 if (!clientSource.includes('.expl-icon svg{width:16px;height:16px;display:block;}')) throw new Error('svg icon sizing css missing')
+if (!clientSource.includes("function copyPath(target)")) throw new Error('copyPath must take explicit node (menu closes before click)')
+if (!clientSource.includes("label: '\u2b07 \u4e0b\u8f7d'")) throw new Error('download menu item missing')
+if (!clientSource.includes("function downloadFile(path)")) throw new Error('downloadFile missing')
 if (!clientSource.includes('function nbPickMime')) throw new Error('notebook output mime preference missing')
 
 

@@ -26,7 +26,7 @@
 - **切换按钮**：有 Session log 时保持在「Session log」胶囊右侧；空白新会话则在输入框上方右端显示 📁，与 workspace / preset 控件同一水平线。
 - **文件类型图标**：采用 JupyterLab `ui-components` 的 filetype SVG 集（BSD-3-Clause）——notebook 橙、markdown 紫、json 黄、pdf 红、表格绿等固定品牌色，16px 渲染；未命中扩展名按「已知代码语言 → 文本编辑器图标，其余 → 空白文件」兜底。
 - **跟随会话**：默认展示当前会话工作目录（`session.header.cwd`），切换会话/工作区自动跟随；路径栏只读展示，不可跳转。
-- **文件操作**（右键菜单）：用系统打开、重命名、移到废纸篓、新建文件、新建文件夹、复制路径；空白处右键可刷新。
+- **文件操作**（右键菜单）：预览、用系统打开、重命名、移到废纸篓、复制完整路径、⬇ 下载到本机（≤64MB，菜单末项）；空白处右键可刷新。
 - **多选**：⌘/Ctrl 加选、Shift 连选；多选时批量移到废纸篓、批量拖拽移动。
 - **拖拽**：文件/文件夹拖到目录移动；系统文件拖入上传。
 - **交互**：单击选中、双击文件夹展开/收起、双击文件系统打开、⌘ 打开文件、F2/回车/Delete/Escape 等键位习惯（行内重命名选中扩展名前半段）。
@@ -113,7 +113,7 @@ cd dsh-tree
 ## 实现说明
 
 - **宿主↔浏览器桥梁**：永久插件（profile bundle）不经过 dynamic runner，没有 `harness.handle`/`host.call`；宿主用 `webServer.register({ kind: 'exact', path: '/api/dsh-tree', handler })` 注册同源 HTTP 路由，浏览器用 `fetch` POST JSON 调用（`{ action, args }` 分派）。
-- **动作**：`root` / `sessionCwd` / `list` / `open` / `trash` / `move` / `create` / `upload` / `speed-status`（返回 `{ phase, tokens, tps, ttft }`）。
+- **动作**：`root` / `sessionCwd` / `list` / `open` / `trash` / `move` / `create` / `upload` / `download` / `speed-status`（返回 `{ phase, tokens, tps, ttft }`）。
 - **跨平台**：`move` / `create` / `upload` 直接用 `node:fs/promises`（`rename`/`mkdir`/`writeFile`），mac/Linux/Windows 通用、无 shell 注入面；仅 `open` / `trash` 这类「唤起系统」的动作按 `process.platform` 分支选命令（见下表）。
 - **吞吐统计**：`ctx.on('llm/stream', ...)` 包装 waterfall，按会话（`sessionId`/`agent.id`/`meta` 探测）维护 `{ phase: waiting|streaming|done, tokens, tps, ttft }`；首 chunk 到达标记 streaming（TTFT），结束后 4s 清除；`speed-status` 查询时按流开始累计秒数算平均 t/s（0.5s 暖机）。等待态文字用主题 token `--dsw-alias-label-caption`（与 shell 计时同款灰）。
 - **宽度接管**：MutationObserver 监听 shell 框架的 `grid-template-columns`，把 details 轨改写为插件宽度（264–420px），并在 shell 重渲染后保持；`[data-side="details"]` 隐藏 shell 自带手柄，改用面板左缘自定义拖拽手柄。
