@@ -24,9 +24,10 @@
 - **右侧详情列（details）文件树**：与会话区真正并列（三列网格 `侧栏 | 会话 | 资源管理器`），不悬浮、不遮挡。
 - **宽度与左侧工作区完全一致**：默认 280px，拖左边缘在 264–420px 间调整（shell 自带 details 列被硬限制在 300–520px，本插件直接改写网格轨实现同宽）。
 - **切换按钮**：有 Session log 时保持在「Session log」胶囊右侧；空白新会话则在输入框上方右端显示 📁，与 workspace / preset 控件同一水平线。
+- **上传与分块**：拖入/选择多文件上传；超过 1MB 自动走分块通道（JupyterLab 同款语义：首块覆盖、后续追加），面板路径栏下方显示实时进度行（队列 n/m + 百分比），完成后短暂提示 ✓。
 - **文件类型图标**：采用 JupyterLab `ui-components` 的 filetype SVG 集（BSD-3-Clause）——notebook 橙、markdown 紫、json 黄、pdf 红、表格绿等固定品牌色，16px 渲染；未命中扩展名按「已知代码语言 → 文本编辑器图标，其余 → 空白文件」兜底。
 - **跟随会话**：默认展示当前会话工作目录（`session.header.cwd`），切换会话/工作区自动跟随；路径栏只读展示，不可跳转。
-- **文件操作**（右键菜单）：预览、用系统打开、重命名、移到废纸篓、复制完整路径、⬇ 下载到本机（≤64MB，菜单末项）；空白处右键可刷新。
+- **文件操作**（右键菜单）：预览、用系统打开、重命名、移到废纸篓、复制完整路径、⬇ 下载到本机（流式不限大小，菜单末项）——POST 换取一次性 2 分钟时效票据 URL，由 `/api/dsh-tree/dl` 流式发送（RFC 5987 文件名），任意大小零内存放大；空白处右键可刷新。
 - **多选**：⌘/Ctrl 加选、Shift 连选；多选时批量移到废纸篓、批量拖拽移动。
 - **拖拽**：文件/文件夹拖到目录移动；系统文件拖入上传。
 - **交互**：单击选中、双击文件夹展开/收起、双击文件系统打开、⌘ 打开文件、F2/回车/Delete/Escape 等键位习惯（行内重命名选中扩展名前半段）。
@@ -122,7 +123,7 @@ cd dsh-tree
 ## 安全模型
 
 - **请求门**：`/api/dsh-tree` 仅接受 POST；带 `Origin` 时必须与 `Host` 同源（挡跨站 CSRF 与 DNS rebinding），且强制 `x-dsh-tree: 1` 自定义头 + `content-type: application/json`——自定义头迫使浏览器先走 CORS preflight，而本路由永不返回 CORS 头，恶意网页无法用 `text/plain` 简单请求盲打写操作。非浏览器本地工具（无 Origin）不受影响。
-- **路径围栏**：除 `list` 走沙箱 `fs.resolve` 外，所有具名文件操作（`read`/`move`/`trash`/`open`/`create`/`upload`）先经 `confine()`：realpath 解析后必须落在「workspace 根 ∪ 所有已知会话 cwd」子树内，越界返回 403。realpath 解析可防符号链接逃逸，且容忍目标末级尚不存在（新建/上传/移动目的地）。已知残留：confine 与实际操作之间存在理论上的 TOCTOU 窗口（符号链接竞态），Node 可移植 API 无法根除。
+- **路径围栏**：除 `list` 走沙箱 `fs.resolve` 外，所有具名文件操作（`read`/`move`/`trash`/`open`/`create`/`upload`）先经 `confine()`：realpath 解析后必须落在「workspace 根 ∪ 所有已知会话 cwd」子树内（请求可携带 sessionId，供新会话注册滞后时直查其 cwd 兜底；list/read/download 遇竞态 403 自动重试），越界返回 403。realpath 解析可防符号链接逃逸，且容忍目标末级尚不存在（新建/上传/移动目的地）。已知残留：confine 与实际操作之间存在理论上的 TOCTOU 窗口（符号链接竞态），Node 可移植 API 无法根除。
 - **文件名校验**：`create` 与 `upload` 的 `name` 一律拒绝 `.`、`..`、路径分隔符与 NUL，杜绝 `../` 穿越。
 
 ## 平台

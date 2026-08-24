@@ -1,5 +1,6 @@
 import { apply } from '../lib/index.js'
 import { mkdir, writeFile, rename, readFile, readdir, rm, stat, symlink } from 'node:fs/promises'
+import { PassThrough } from 'node:stream'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -8,15 +9,22 @@ const WORK = join(tmpdir(), 'dsh-tree-smoke-' + process.pid + '-' + Date.now())
 await mkdir(WORK, { recursive: true })
 
 let captured = null
+let dlCaptured = null
 let streamListener = null
 let spawned = []
 // 会话表：s1 指向 WORK；后续用例可动态加入其他 cwd，验证「会话目录成为允许基」
 const sessionHeaders = new Map([['s1', WORK]])
+// 模拟注册滞后：出现在 get 但暂不在 list 里的会话
+const hiddenFromList = new Set()
 const ctx = {
   effect: (fn) => { const d = fn(); return () => { if (d) d() } },
   on: (name, fn) => { if (name === 'llm/stream') streamListener = fn; return () => { if (name === 'llm/stream') streamListener = null } },
   timer: { interval: () => () => {} },
-  webServer: { register: (route) => { captured = route; return () => { captured = null } } },
+  webServer: { register: (route) => {
+    if (route.path === '/api/dsh-tree/dl') { dlCaptured = route.handler; return () => {} }
+    captured = route
+    return () => { captured = null }
+  } },
   fs: {
     resolve: async (p) => ({ displayPath: p }),
     listDir: async (t) => (await readdir(t.displayPath)).map((name) => {
@@ -30,7 +38,9 @@ const ctx = {
   sandboxPolicy: { workspaceRoot: WORK },
   sessions: {
     get: (id) => sessionHeaders.has(id) ? { header: { cwd: sessionHeaders.get(id) } } : undefined,
-    list: () => Array.from(sessionHeaders.entries()).map(([id, cwd]) => ({ id, header: { cwd } })),
+    list: () => Array.from(sessionHeaders.entries())
+      .filter(([id]) => !hiddenFromList.has(id))
+      .map(([id, cwd]) => ({ id, header: { cwd } })),
   },
 }
 apply(ctx)
@@ -178,6 +188,16 @@ sessionHeaders.delete('s2')
 const deniedAgain = await call({ action: 'read', args: { path: secretPath } })
 if (deniedAgain.body.ok || deniedAgain.code !== 403) throw new Error('removing session must re-confine')
 
+// 切换竞态：新会话仅 get 可见（list 尚未纳入）时，凭 sessionId 直查 cwd 放行
+sessionHeaders.set('s9', OUT)
+hiddenFromList.add('s9')
+const raceNoId = await call({ action: 'list', args: { path: OUT } })
+if (raceNoId.body.ok || raceNoId.code !== 403) throw new Error('without sessionId must stay confined')
+const raceWithId = await call({ action: 'list', args: { path: OUT, sessionId: 's9' } })
+if (!raceWithId.body.ok) throw new Error('sessionId direct-lookup must allow: ' + JSON.stringify(raceWithId.body))
+hiddenFromList.delete('s9')
+sessionHeaders.delete('s9')
+
 const r7 = await call({ action: 'unknown', args: {} })
 if (r7.body.ok) throw new Error('unknown should fail')
 
@@ -271,12 +291,42 @@ if (!String(rdPdf.body.data).startsWith('JVBER')) throw new Error('pdf base64 mu
 const dlPath = join(WORK, 'dl.bin')
 await writeFile(dlPath, Buffer.from([0x01, 0x02, 0x03, 0xff]))
 const dl = await call({ action: 'download', args: { path: dlPath } })
-if (!dl.body.ok || dl.body.name !== 'dl.bin') throw new Error('download fail: ' + JSON.stringify(dl.body))
-if (Buffer.from(dl.body.data, 'base64').toString('hex') !== '010203ff') throw new Error('download bytes mismatch')
+if (!dl.body.ok || dl.body.name !== 'dl.bin' || !String(dl.body.url).includes('/api/dsh-tree/dl?t=')) {
+  throw new Error('download ticket fail: ' + JSON.stringify(dl.body))
+}
+// 凭票据流式取回字节
+const token = new URL(dl.body.url, 'http://local').searchParams.get('t')
+const dlRes = (() => { const pt = new PassThrough(); const chunks = []
+  pt.writeHead = (code, headers) => { pt.code = code; pt.headers = headers }
+  pt.on('data', (c) => chunks.push(c)); pt.__chunks = chunks; return pt })()
+dlRes.code = 0
+dlCaptured({ url: '/api/dsh-tree/dl?t=' + token, on: () => {} }, dlRes)
+await new Promise((r) => setTimeout(r, 30))
+if (dlRes.code !== 200) throw new Error('dl status must 200, got ' + dlRes.code)
+if (!dlRes.headers || dlRes.headers['content-length'] !== '4') throw new Error('content-length mismatch: ' + JSON.stringify(dlRes.headers))
+if (Buffer.concat(dlRes.__chunks).toString('hex') !== '010203ff') throw new Error('streamed bytes mismatch')
+if (!dlRes.headers['content-disposition'].includes("filename*=UTF-8''")) throw new Error('rfc5987 filename missing')
+// 票据一次性：复用与伪造均 404
+for (const t of [token, 'deadbeef']) {
+  const rr = (() => { const pt = new PassThrough(); pt.writeHead = (c) => { pt.code = c }; pt.on = () => {}; return pt })()
+  await dlCaptured({ url: '/api/dsh-tree/dl?t=' + t, on: () => {} }, rr)
+  await new Promise((r) => setTimeout(r, 20))
+  if (rr.code !== 404) throw new Error('ticket ' + (t === token ? 'reuse' : 'forge') + ' must 404, got ' + rr.code)
+}
 const dlDir = await call({ action: 'download', args: { path: join(WORK, 'subdir') } })
 if (dlDir.body.ok) throw new Error('directory download must fail')
 const dlOut = await call({ action: 'download', args: { path: secretPath } })
 if (dlOut.body.ok || dlOut.code !== 403) throw new Error('out-of-root download must 403')
+
+// 分块上传：chunk=1 覆盖创建，chunk>=2 追加
+const cPath = join(WORK, 'chunked.bin')
+await writeFile(cPath, 'stale-must-be-replaced')
+const ck1 = await call({ action: 'upload', args: { dir: WORK, name: 'chunked.bin', data: Buffer.from('AAAA').toString('base64'), chunk: 1 } })
+if (!ck1.body.ok) throw new Error('chunk1 fail: ' + JSON.stringify(ck1.body))
+if ((await readFile(cPath, 'utf8')) !== 'AAAA') throw new Error('chunk1 must overwrite stale file')
+const ck2 = await call({ action: 'upload', args: { dir: WORK, name: 'chunked.bin', data: Buffer.from('BBBB').toString('base64'), chunk: 2 } })
+if (!ck2.body.ok) throw new Error('chunk2 fail: ' + JSON.stringify(ck2.body))
+if ((await readFile(cPath, 'utf8')) !== 'AAAABBBB') throw new Error('chunk2 must append')
 
 const dirRead = await call({ action: 'read', args: { path: WORK } })
 if (dirRead.body.ok) throw new Error('directory read should fail')
