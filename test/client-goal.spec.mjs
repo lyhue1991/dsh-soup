@@ -1,4 +1,4 @@
-// dsh-tree 客户端渲染测试：
+// dsh-soup 客户端渲染测试：
 // 验证 Session log 与空白会话两处资源管理器入口，以及多行 GoalBar
 // （复用原生 goal projection + 动作动词）的展示与按钮状态机。
 // 测试场景：active / paused / blocked / 无目标 / 已完成 / 编辑态。
@@ -45,7 +45,7 @@ globalThis.window.__ModuleLoader__ = { load: (spec) => { loadedFactory = spec.fa
 await import('../lib/client.js')
 if (!loadedFactory) throw new Error('module loader did not capture factory')
 
-// ui-primitives 桩：验证 dsh-tree 对 MarkdownText 的可选接线
+// ui-primitives 桩：验证 dsh-soup 对 MarkdownText 的可选接线
 function MarkdownTextStub(props) {
   return { type: 'div', props: { className: 'md-stub', children: [props.text] } }
 }
@@ -81,7 +81,7 @@ if (goalReg.reg.locale !== 'goal') throw new Error('goal dock must use native go
 const goalRender = goalReg.renderFn
 
 // ---- 资源管理器入口：普通会话在 Session log 右侧 ----
-const headerToggle = registered.find((r) => r.reg && r.reg.id === 'dsh-tree-toggle')
+const headerToggle = registered.find((r) => r.reg && r.reg.id === 'dsh-soup-toggle')
 if (!headerToggle) throw new Error('session-header explorer toggle not registered')
 if (headerToggle.reg.name !== 'conversation.session.header.utilities') {
   throw new Error('explorer toggle must use conversation.session.header.utilities')
@@ -100,7 +100,7 @@ if (headerElement.props['aria-label'] !== '项目资源管理器') {
 }
 
 // ---- 资源管理器入口：空白会话在输入框上方、控件行右端 ----
-const heroToggle = registered.find((r) => r.reg && r.reg.id === 'dsh-tree-hero-toggle')
+const heroToggle = registered.find((r) => r.reg && r.reg.id === 'dsh-soup-hero-toggle')
 if (!heroToggle) throw new Error('hero explorer toggle not registered')
 if (heroToggle.reg.name !== 'conversation.input.dock') {
   throw new Error('hero explorer toggle must use conversation.input.dock')

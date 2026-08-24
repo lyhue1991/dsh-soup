@@ -1,6 +1,6 @@
-# dsh-tree：项目资源管理器（独立插件）。
-# 宿主半区注册 /api/dsh-tree 文件操作路由；浏览器半区注册
+# dsh-soup：项目资源管理器（独立插件）。
+# 宿主半区注册 /api/dsh-soup 文件操作路由；浏览器半区注册
 # details 右列面板 + Session log 右侧 📁 切换按钮。
 - insert:
-    - id: ui-dsh-tree
-      name: '@lyhue1991/dsh-tree'
+    - id: ui-dsh-soup
+      name: '@lyhue1991/dsh-soup'

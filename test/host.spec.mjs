@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 // 临时工作区：真实 node:fs 验证 move/create/upload + 路径围栏
-const WORK = join(tmpdir(), 'dsh-tree-smoke-' + process.pid + '-' + Date.now())
+const WORK = join(tmpdir(), 'dsh-soup-smoke-' + process.pid + '-' + Date.now())
 await mkdir(WORK, { recursive: true })
 
 let captured = null
@@ -21,7 +21,7 @@ const ctx = {
   on: (name, fn) => { if (name === 'llm/stream') streamListener = fn; return () => { if (name === 'llm/stream') streamListener = null } },
   timer: { interval: () => () => {} },
   webServer: { register: (route) => {
-    if (route.path === '/api/dsh-tree/dl') { dlCaptured = route.handler; return () => {} }
+    if (route.path === '/api/dsh-soup/dl') { dlCaptured = route.handler; return () => {} }
     captured = route
     return () => { captured = null }
   } },
@@ -45,14 +45,14 @@ const ctx = {
 }
 apply(ctx)
 if (!captured) throw new Error('route not registered')
-if (captured.path !== '/api/dsh-tree') throw new Error('bad path')
+if (captured.path !== '/api/dsh-soup') throw new Error('bad path')
 
 // 合法请求头（与 lib/client.js 的 rpc 一致）
 const GOOD_HEADERS = {
   host: '127.0.0.1:3080',
   origin: 'http://127.0.0.1:3080',
   'content-type': 'application/json',
-  'x-dsh-tree': '1',
+  'x-dsh-soup': '1',
 }
 
 function call(body, opts = {}) {
@@ -127,14 +127,14 @@ if (gPlain.code !== 403) throw new Error('text/plain simple request must 403: ' 
 const gNoHdr = await call({ action: 'root', args: {} }, {
   headers: { host: GOOD_HEADERS.host, origin: GOOD_HEADERS.origin, 'content-type': 'application/json' },
 })
-if (gNoHdr.code !== 403) throw new Error('missing x-dsh-tree must 403: ' + JSON.stringify(gNoHdr.body))
+if (gNoHdr.code !== 403) throw new Error('missing x-dsh-soup must 403: ' + JSON.stringify(gNoHdr.body))
 const gGet = await call({ action: 'root', args: {} }, { method: 'GET' })
 if (gGet.code !== 405) throw new Error('GET must 405, got ' + String(gGet.code))
 const gOpt = await call({}, { method: 'OPTIONS' })
 if (gOpt.code !== 403) throw new Error('OPTIONS preflight must 403, got ' + String(gOpt.code))
 
 // ---- 路径围栏：越界读写开删全部 403，文件保持原样 ----
-const OUT = join(tmpdir(), 'dsh-tree-out-' + process.pid + '-' + Date.now())
+const OUT = join(tmpdir(), 'dsh-soup-out-' + process.pid + '-' + Date.now())
 await mkdir(OUT, { recursive: true })
 const secretPath = join(OUT, 'secret.txt')
 await writeFile(secretPath, 'top secret', 'utf8')
@@ -265,10 +265,10 @@ try { await it3.return() } catch {}
 
 // ---- read/write：文本读取（含截断/目录拒绝）、图片 base64、二进制嗅探、写回保存 ----
 const txtPath = join(WORK, 'readme.txt')
-await writeFile(txtPath, 'hello dsh-tree\n第二行', 'utf8')
+await writeFile(txtPath, 'hello dsh-soup\n第二行', 'utf8')
 const rd1 = await call({ action: 'read', args: { path: txtPath } })
 if (!rd1.body.ok || rd1.body.kind !== 'text') throw new Error('read text fail: ' + JSON.stringify(rd1.body))
-if (rd1.body.content !== 'hello dsh-tree\n第二行') throw new Error('read text content mismatch')
+if (rd1.body.content !== 'hello dsh-soup\n第二行') throw new Error('read text content mismatch')
 if (rd1.body.truncated) throw new Error('small file must not be truncated')
 
 const pngPath = join(WORK, 'pixel.png')
@@ -291,7 +291,7 @@ if (!String(rdPdf.body.data).startsWith('JVBER')) throw new Error('pdf base64 mu
 const dlPath = join(WORK, 'dl.bin')
 await writeFile(dlPath, Buffer.from([0x01, 0x02, 0x03, 0xff]))
 const dl = await call({ action: 'download', args: { path: dlPath } })
-if (!dl.body.ok || dl.body.name !== 'dl.bin' || !String(dl.body.url).includes('/api/dsh-tree/dl?t=')) {
+if (!dl.body.ok || dl.body.name !== 'dl.bin' || !String(dl.body.url).includes('/api/dsh-soup/dl?t=')) {
   throw new Error('download ticket fail: ' + JSON.stringify(dl.body))
 }
 // 凭票据流式取回字节
@@ -300,7 +300,7 @@ const dlRes = (() => { const pt = new PassThrough(); const chunks = []
   pt.writeHead = (code, headers) => { pt.code = code; pt.headers = headers }
   pt.on('data', (c) => chunks.push(c)); pt.__chunks = chunks; return pt })()
 dlRes.code = 0
-dlCaptured({ url: '/api/dsh-tree/dl?t=' + token, on: () => {} }, dlRes)
+dlCaptured({ url: '/api/dsh-soup/dl?t=' + token, on: () => {} }, dlRes)
 await new Promise((r) => setTimeout(r, 30))
 if (dlRes.code !== 200) throw new Error('dl status must 200, got ' + dlRes.code)
 if (!dlRes.headers || dlRes.headers['content-length'] !== '4') throw new Error('content-length mismatch: ' + JSON.stringify(dlRes.headers))
@@ -309,7 +309,7 @@ if (!dlRes.headers['content-disposition'].includes("filename*=UTF-8''")) throw n
 // 票据一次性：复用与伪造均 404
 for (const t of [token, 'deadbeef']) {
   const rr = (() => { const pt = new PassThrough(); pt.writeHead = (c) => { pt.code = c }; pt.on = () => {}; return pt })()
-  await dlCaptured({ url: '/api/dsh-tree/dl?t=' + t, on: () => {} }, rr)
+  await dlCaptured({ url: '/api/dsh-soup/dl?t=' + t, on: () => {} }, rr)
   await new Promise((r) => setTimeout(r, 20))
   if (rr.code !== 404) throw new Error('ticket ' + (t === token ? 'reuse' : 'forge') + ' must 404, got ' + rr.code)
 }
@@ -335,7 +335,7 @@ const wr1 = await call({ action: 'write', args: { path: txtPath, content: 'nope'
 if (wr1.body.ok) throw new Error('write should be removed (preview-only): ' + JSON.stringify(wr1.body))
 if (!String(wr1.body.error || '').startsWith('unknown action')) throw new Error('write must be unknown action: ' + JSON.stringify(wr1.body))
 const rd4 = await call({ action: 'read', args: { path: txtPath } })
-if (!rd4.body.ok || rd4.body.content !== 'hello dsh-tree\n第二行') throw new Error('read after removed write must be unchanged')
+if (!rd4.body.ok || rd4.body.content !== 'hello dsh-soup\n第二行') throw new Error('read after removed write must be unchanged')
 
 const missingRead = await call({ action: 'read', args: { path: join(WORK, 'nope.txt') } })
 if (missingRead.body.ok) throw new Error('missing read should fail')

@@ -1,4 +1,4 @@
-# dsh-tree — DSH 项目资源管理器
+# dsh-soup — DSH 项目资源管理器
 
 一个可安装的 DSH（DeepSeek Harness）插件：在会话右侧以**并列网格列**的形式提供项目文件树，与左侧工作区同款配色、同宽（默认 280px，可拖拽 264–420px）。文件「预览」在会话区新增**「预览」标签页**（原生 `conversation.view`，与 对话/轨迹 同级），采用**只读预览**：Markdown / HTML / JSON / CSV·TSV 专属渲染、图片预览、其余纯文本（不提供编辑保存）。并附带**模型吞吐徽标**（输入框正上方实时显示「正在等待模型...」与彩色 `t/s` 速率）与**GoalBar 多行展示**（把原生单行截断 GoalBar 放开为多行完整显示）。**三平台通用**（macOS / Linux / Windows）。
 
@@ -50,8 +50,8 @@
 > 需要 DSH Desktop（或支持 `dsh plugin add` 的 DSH 安装）。插件作为 profile bundle 安装。
 
 ```sh
-# 安装最新版（npm 包名 @lyhue1991/dsh-tree）
-dsh plugin add @lyhue1991/dsh-tree
+# 安装最新版（npm 包名 @lyhue1991/dsh-soup）
+dsh plugin add @lyhue1991/dsh-soup
 ```
 
 或通过 DSH Desktop「设置 → 插件 → 插件市场」搜索安装。
@@ -102,18 +102,18 @@ dsh plugin add @lyhue1991/dsh-tree
 ## 开发
 
 ```sh
-git clone https://github.com/lyhue1991/dsh-tree.git
-cd dsh-tree
+git clone https://github.com/lyhue1991/dsh-soup.git
+cd dsh-soup
 # 纯 JS 产物，无需构建：
-#   lib/index.js  —— 宿主半区（webServer 路由 /api/dsh-tree，含 llm/stream 统计）
+#   lib/index.js  —— 宿主半区（webServer 路由 /api/dsh-soup，含 llm/stream 统计）
 #   lib/client.js —— 浏览器半区（__ModuleLoader__ 工厂，内联 CSS）
 ```
 
-`cordis.patch.yml` 在组合中插入一行 `ui-dsh-tree`，`dsh.bundle.patch` 指向它；`dsh.client.inject` 声明浏览器半区依赖的客户端包。
+`cordis.patch.yml` 在组合中插入一行 `ui-dsh-soup`，`dsh.bundle.patch` 指向它；`dsh.client.inject` 声明浏览器半区依赖的客户端包。
 
 ## 实现说明
 
-- **宿主↔浏览器桥梁**：永久插件（profile bundle）不经过 dynamic runner，没有 `harness.handle`/`host.call`；宿主用 `webServer.register({ kind: 'exact', path: '/api/dsh-tree', handler })` 注册同源 HTTP 路由，浏览器用 `fetch` POST JSON 调用（`{ action, args }` 分派）。
+- **宿主↔浏览器桥梁**：永久插件（profile bundle）不经过 dynamic runner，没有 `harness.handle`/`host.call`；宿主用 `webServer.register({ kind: 'exact', path: '/api/dsh-soup', handler })` 注册同源 HTTP 路由，浏览器用 `fetch` POST JSON 调用（`{ action, args }` 分派）。
 - **动作**：`root` / `sessionCwd` / `list` / `open` / `trash` / `move` / `create` / `upload` / `download` / `speed-status`（返回 `{ phase, tokens, tps, ttft }`）。
 - **跨平台**：`move` / `create` / `upload` 直接用 `node:fs/promises`（`rename`/`mkdir`/`writeFile`），mac/Linux/Windows 通用、无 shell 注入面；仅 `open` / `trash` 这类「唤起系统」的动作按 `process.platform` 分支选命令（见下表）。
 - **吞吐统计**：`ctx.on('llm/stream', ...)` 包装 waterfall，按会话（`sessionId`/`agent.id`/`meta` 探测）维护 `{ phase: waiting|streaming|done, tokens, tps, ttft }`；首 chunk 到达标记 streaming（TTFT），结束后 4s 清除；`speed-status` 查询时按流开始累计秒数算平均 t/s（0.5s 暖机）。等待态文字用主题 token `--dsw-alias-label-caption`（与 shell 计时同款灰）。
@@ -122,7 +122,7 @@ cd dsh-tree
 
 ## 安全模型
 
-- **请求门**：`/api/dsh-tree` 仅接受 POST；带 `Origin` 时必须与 `Host` 同源（挡跨站 CSRF 与 DNS rebinding），且强制 `x-dsh-tree: 1` 自定义头 + `content-type: application/json`——自定义头迫使浏览器先走 CORS preflight，而本路由永不返回 CORS 头，恶意网页无法用 `text/plain` 简单请求盲打写操作。非浏览器本地工具（无 Origin）不受影响。
+- **请求门**：`/api/dsh-soup` 仅接受 POST；带 `Origin` 时必须与 `Host` 同源（挡跨站 CSRF 与 DNS rebinding），且强制 `x-dsh-soup: 1` 自定义头 + `content-type: application/json`——自定义头迫使浏览器先走 CORS preflight，而本路由永不返回 CORS 头，恶意网页无法用 `text/plain` 简单请求盲打写操作。非浏览器本地工具（无 Origin）不受影响。
 - **路径围栏**：除 `list` 走沙箱 `fs.resolve` 外，所有具名文件操作（`read`/`move`/`trash`/`open`/`create`/`upload`）先经 `confine()`：realpath 解析后必须落在「workspace 根 ∪ 所有已知会话 cwd」子树内（请求可携带 sessionId，供新会话注册滞后时直查其 cwd 兜底；list/read/download 遇竞态 403 自动重试），越界返回 403。realpath 解析可防符号链接逃逸，且容忍目标末级尚不存在（新建/上传/移动目的地）。已知残留：confine 与实际操作之间存在理论上的 TOCTOU 窗口（符号链接竞态），Node 可移植 API 无法根除。
 - **文件名校验**：`create` 与 `upload` 的 `name` 一律拒绝 `.`、`..`、路径分隔符与 NUL，杜绝 `../` 穿越。
 
