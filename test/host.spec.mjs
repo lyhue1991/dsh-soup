@@ -414,6 +414,25 @@ if (imgTxt.code !== 415) throw new Error('img non-image must 415, got ' + imgTxt
 const imgCross = await callImg(join(WORK, 'tiny.png'), { 'sec-fetch-site': 'cross-site' })
 if (imgCross.code !== 403) throw new Error('img cross-site must 403, got ' + imgCross.code)
 
+// ---- mtime：自动刷新用的轻量变更探测 ----
+const mProbe = join(WORK, 'probe.txt')
+await writeFile(mProbe, 'v1', 'utf8')
+const mt1 = await call({ action: 'mtime', args: { paths: [WORK, mProbe, secretPath] } })
+if (!mt1.body.ok) throw new Error('mtime fail: ' + JSON.stringify(mt1.body))
+const mWork = mt1.body.mtimes[WORK]
+const mFile = mt1.body.mtimes[mProbe]
+if (!mWork || !mWork.d) throw new Error('mtime dir must carry d flag: ' + JSON.stringify(mWork))
+if (!mFile || typeof mFile.m !== 'number' || mFile.s !== 2) throw new Error('mtime file must carry m+s: ' + JSON.stringify(mFile))
+if (mt1.body.mtimes[secretPath] !== null) throw new Error('mtime out-of-root must be null: ' + JSON.stringify(mt1.body.mtimes[secretPath]))
+await new Promise((r) => setTimeout(r, 20))
+await writeFile(mProbe, 'v2-longer', 'utf8')
+const mt2 = await call({ action: 'mtime', args: { paths: [mProbe] } })
+const mFile2 = mt2.body.mtimes[mProbe]
+if (!mFile2 || (mFile2.m === mFile.m && mFile2.s === mFile.s)) throw new Error('mtime must change after write: ' + JSON.stringify(mFile2))
+if (mFile2.s !== 9) throw new Error('mtime size must track content: ' + JSON.stringify(mFile2))
+const mtMissing = await call({ action: 'mtime', args: { paths: [join(WORK, 'nope.txt')] } })
+if (mtMissing.body.mtimes[join(WORK, 'nope.txt')] !== null) throw new Error('mtime missing file must be null')
+
 await rm(WORK, { recursive: true, force: true })
 await rm(OUT, { recursive: true, force: true })
-console.log('SMOKE OK: root, sessionCwd, create, upload, move(no-shell), list, open, trash, guard, read(text/image/binary/dir-miss), write-removed(preview-only), speed idle/waiting/streaming-tps/done/stall, gate(origin/header/method), confine(out-of-root/traversal/symlink/session-base), img(200/png-bytes/out-403/non-image-415/cross-site-403)')
+console.log('SMOKE OK: root, sessionCwd, create, upload, move(no-shell), list, open, trash, guard, read(text/image/binary/dir-miss), write-removed(preview-only), speed idle/waiting/streaming-tps/done/stall, gate(origin/header/method), confine(out-of-root/traversal/symlink/session-base), img(200/png-bytes/out-403/non-image-415/cross-site-403), mtime(dir-flag/size/out-null/changed/missing-null)')
