@@ -69,6 +69,9 @@ const ctx = {
   sessions: { binding: () => ({ session: { projections: { faceOf: () => undefined } } }) },
   remote: { goals: { edit: () => Promise.resolve({ ok: true }), pause: () => Promise.resolve({ ok: true }), resume: () => Promise.resolve({ ok: true }), clear: () => Promise.resolve({ ok: true }) } },
   timer: { interval: () => () => {} },
+  // i18n stub：register 吸收词典；bind 返回翻译函数（返回 key 本身，
+  // 断言即可验证「组件走 T('key') 而非硬编码中文」的接线）
+  locale: { register: () => {}, bind: () => (key) => key },
   effect: (fn) => { const d = fn(); return () => { if (d) d() } },
 }
 const applyFn = factoryModule.apply || factoryModule.default
@@ -95,8 +98,8 @@ const headerElement = headerComponent.type(headerComponent.props)
 if (!headerElement.props.className.includes('expl-tool')) {
   throw new Error('session-header explorer toggle must keep toolbar styling')
 }
-if (headerElement.props['aria-label'] !== '项目资源管理器') {
-  throw new Error('session-header explorer toggle is missing its accessible label')
+if (headerElement.props['aria-label'] !== 'explorer.label') {
+  throw new Error('session-header explorer toggle must use the i18n label key: ' + headerElement.props['aria-label'])
 }
 
 // ---- 资源管理器入口：空白会话在输入框上方、控件行右端 ----
@@ -245,7 +248,7 @@ if (!clientSource.includes('calc(var(--dsh-composer-side-clearance) + 12px)')) {
 if (!clientSource.includes('function setHeroDetailsWidth') || !clientSource.includes('setHeroDetailsWidth(event.currentTarget, DETAILS_DEFAULT)')) {
   throw new Error('hero explorer toggle must open the blank-session details grid directly')
 }
-const closeLabelIndex = clientSource.indexOf("'aria-label': '关闭资源管理器'")
+const closeLabelIndex = clientSource.indexOf("'aria-label': T('explorer.closePanel')")
 const closeHandlerSource = clientSource.slice(Math.max(0, closeLabelIndex - 500), closeLabelIndex)
 if (closeLabelIndex < 0 || !closeHandlerSource.includes('layout.closeDetails()') || !closeHandlerSource.includes('setHeroDetailsWidth(event.currentTarget, 0)')) {
   throw new Error('explorer close button must also close the blank-session details grid directly')
@@ -280,7 +283,7 @@ if (!clientSource.includes('function autoHeartbeat')) throw new Error('auto refr
 if (!clientSource.includes('AUTO_HEARTBEAT_MS = 1000')) throw new Error('auto refresh heartbeat interval missing')
 if (!clientSource.includes('AUTO_BACKOFF_MAX_MS = 60000')) throw new Error('auto refresh backoff cap missing')
 if (!clientSource.includes('function refreshAll')) throw new Error('manual refresh-all missing')
-if (!clientSource.includes("title: '刷新（保持已展开目录）'")) throw new Error('refresh button missing in explorer header')
+if (!clientSource.includes("title: T('explorer.refreshTitle')")) throw new Error('refresh button must use the i18n title key')
 if (!clientSource.includes('var ICON_REFRESH')) throw new Error('toolbar refresh svg icon missing')
 if (clientSource.includes('dangerouslySetInnerHTML: { __html: ICON_CLOSE }')) throw new Error('close button must not reuse ICON_CLOSE (collides with goalIcon var)')
 if (!clientSource.includes('expl-menu-ico')) throw new Error('context-menu refresh item must use the svg icon')
@@ -306,7 +309,7 @@ if (!clientSource.includes('jp-notebook-icon-color')) throw new Error('notebook 
 if (!clientSource.includes('dangerouslySetInnerHTML: { __html: iconSvgFor(node) }')) throw new Error('tree rows must render svg icons')
 if (!clientSource.includes('.expl-icon svg{width:16px;height:16px;display:block;}')) throw new Error('svg icon sizing css missing')
 if (!clientSource.includes("function copyPath(target)")) throw new Error('copyPath must take explicit node (menu closes before click)')
-if (!clientSource.includes("label: '\u2b07 \u4e0b\u8f7d'")) throw new Error('download menu item missing')
+if (!clientSource.includes("label: T('menu.download')")) throw new Error('download menu item must use the i18n label key')
 if (!clientSource.includes("function downloadFile(path)")) throw new Error('downloadFile missing')
 if (!clientSource.includes('function nbPickMime')) throw new Error('notebook output mime preference missing')
 
