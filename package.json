@@ -1,7 +1,7 @@
 {
   "name": "@lyhue1991/dsh-soup",
   "description": "DSH 项目资源管理器：右侧 details 列文件树（并列网格、宽度与左侧工作区一致 264-420px），有 Session log 时在其右侧、空白新会话在输入框上方右端提供 📁 切换按钮；支持多选、双击展开/打开、右键菜单（打开/系统打开/重命名/废纸篓/新建/复制路径）、拖拽移动、上传。文件「打开」在会话区新增「文件」标签页（原生 conversation.view，与对话/轨迹同级）：文本可编辑 ⌘S 保存、图片预览、二进制提示。附带模型吞吐徽标：输入框正上方显示「正在等待模型...」与彩色 t/s 徽标（数据来自 llm/stream 真实流）。附带 GoalBar 多行展示：把原生单行截断 GoalBar 放开为多行完整显示，编辑用 textarea，工具与数据仍走原生 goal。",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
