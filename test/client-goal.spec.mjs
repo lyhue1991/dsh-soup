@@ -283,6 +283,24 @@ if (!clientSource.includes('function autoHeartbeat')) throw new Error('auto refr
 if (!clientSource.includes('AUTO_HEARTBEAT_MS = 1000')) throw new Error('auto refresh heartbeat interval missing')
 if (!clientSource.includes('AUTO_BACKOFF_MAX_MS = 60000')) throw new Error('auto refresh backoff cap missing')
 if (!clientSource.includes('function refreshAll')) throw new Error('manual refresh-all missing')
+if (!clientSource.includes('var expandedDirs = new Set()')) throw new Error('expanded folders must be stored across tree refreshes')
+if (!clientSource.includes('var expandedDirsCwd = null')) throw new Error('expanded-folder state must be scoped to the current project cwd')
+if (!clientSource.includes('async function restoreExpandedChildren(nodes)')) throw new Error('refresh must recursively restore expanded folders')
+if (!clientSource.includes('await restoreExpandedChildren(items)')) {
+  throw new Error('normal refresh must restore expanded-folder state')
+}
+if (clientSource.includes("expanded.push({ path: n.path, open: !!n.open })")) {
+  throw new Error('refreshAll must use the shared recursive expansion restore, not a local one-shot snapshot')
+}
+if (!clientSource.includes('if (node.open) expandedDirs.add(node.path)') ||
+    !clientSource.includes('else expandedDirs.delete(node.path)')) {
+  throw new Error('folder toggles must update persistent expanded paths')
+}
+if (!clientSource.includes('forgetExpandedPaths(trashed)')) throw new Error('trashed folders must be removed from expansion state')
+if (!clientSource.includes('if (isDir) rekeyExpandedPaths(path, dest)')) throw new Error('renamed folders must retain nested expansion state')
+if (!clientSource.includes('if (item.isDir) rekeyExpandedPaths(item.from, item.to)')) {
+  throw new Error('moved folders must retain nested expansion state')
+}
 if (!clientSource.includes("title: T('explorer.refreshTitle')")) throw new Error('refresh button must use the i18n title key')
 if (!clientSource.includes("var NS = 'dsh-soup'")) throw new Error('i18n namespace missing')
 if (!clientSource.includes('var DICT = {')) throw new Error('i18n dictionary missing')
