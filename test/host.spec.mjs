@@ -97,6 +97,10 @@ const u1 = await call({ action: 'upload', args: { dir: WORK, name: 'bin.dat', da
 if (!u1.body.ok) throw new Error('upload fail: ' + JSON.stringify(u1.body))
 const up = await readFile(join(WORK, 'bin.dat'), 'utf8')
 if (up !== 'hello world 你好') throw new Error('upload content mismatch: ' + JSON.stringify(up))
+const uConflict = await call({ action: 'upload', args: { dir: WORK, name: 'bin.dat', data: Buffer.from('replacement').toString('base64') } })
+if (uConflict.body.ok || !uConflict.body.conflict) throw new Error('upload should report existing file conflict: ' + JSON.stringify(uConflict.body))
+const uOverwrite = await call({ action: 'upload', args: { dir: WORK, name: 'bin.dat', data: Buffer.from('replacement').toString('base64'), overwrite: true } })
+if (!uOverwrite.body.ok || (await readFile(join(WORK, 'bin.dat'), 'utf8')) !== 'replacement') throw new Error('confirmed upload should overwrite existing file')
 
 // ---- move：真实改名 ----
 const m1 = await call({ action: 'move', args: { from: join(WORK, 'hello.txt'), to: join(WORK, 'renamed.txt') } })
@@ -320,12 +324,13 @@ if (dlDir.body.ok) throw new Error('directory download must fail')
 const dlOut = await call({ action: 'download', args: { path: secretPath } })
 if (dlOut.body.ok || dlOut.code !== 403) throw new Error('out-of-root download must 403')
 
-// 分块上传：chunk=1 覆盖创建，chunk>=2 追加
+// 分块上传：首块冲突需确认覆盖，chunk>=2 追加
 const cPath = join(WORK, 'chunked.bin')
 await writeFile(cPath, 'stale-must-be-replaced')
 const ck1 = await call({ action: 'upload', args: { dir: WORK, name: 'chunked.bin', data: Buffer.from('AAAA').toString('base64'), chunk: 1 } })
-if (!ck1.body.ok) throw new Error('chunk1 fail: ' + JSON.stringify(ck1.body))
-if ((await readFile(cPath, 'utf8')) !== 'AAAA') throw new Error('chunk1 must overwrite stale file')
+if (ck1.body.ok || !ck1.body.conflict) throw new Error('chunk1 should report stale file conflict')
+const ck1Overwrite = await call({ action: 'upload', args: { dir: WORK, name: 'chunked.bin', data: Buffer.from('AAAA').toString('base64'), chunk: 1, overwrite: true } })
+if (!ck1Overwrite.body.ok || (await readFile(cPath, 'utf8')) !== 'AAAA') throw new Error('confirmed chunk1 must overwrite stale file')
 const ck2 = await call({ action: 'upload', args: { dir: WORK, name: 'chunked.bin', data: Buffer.from('BBBB').toString('base64'), chunk: 2 } })
 if (!ck2.body.ok) throw new Error('chunk2 fail: ' + JSON.stringify(ck2.body))
 if ((await readFile(cPath, 'utf8')) !== 'AAAABBBB') throw new Error('chunk2 must append')
