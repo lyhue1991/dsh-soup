@@ -302,6 +302,9 @@ if (!clientSource.includes('if (item.isDir) rekeyExpandedPaths(item.from, item.t
   throw new Error('moved folders must retain nested expansion state')
 }
 if (!clientSource.includes("title: T('explorer.refreshTitle')")) throw new Error('refresh button must use the i18n title key')
+if (!clientSource.includes("title: T('explorer.newFolderTitle')")) throw new Error('new-folder button must use the i18n title key')
+if (!clientSource.includes('var ICON_NEW_FOLDER')) throw new Error('toolbar new-folder svg icon missing')
+if (!clientSource.includes("startNew(state.cwd, true)")) throw new Error('toolbar new-folder button must use the shared inline creation flow')
 if (!clientSource.includes("var NS = 'dsh-soup'")) throw new Error('i18n namespace missing')
 if (!clientSource.includes('var DICT = {')) throw new Error('i18n dictionary missing')
 if (!clientSource.includes("ctx.locale.register(NS, DICT)")) throw new Error('i18n dictionary must be registered')
