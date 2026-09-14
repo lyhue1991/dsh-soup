@@ -240,6 +240,7 @@ function findNodeByType(node, type, out = []) {
 const textarea6 = findNodeByType(card6, 'textarea')[0]
 if (!textarea6 || !textarea6.props.ref) throw new Error('edit textarea should use an auto-height ref')
 const clientSource = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+const clientBundle = readFileSync(new URL('../lib/client.bundle.js', import.meta.url), 'utf8')
 if (!clientSource.includes('resize:none;overflow:hidden')) throw new Error('edit textarea must disable resize and scrollbar')
 if (!clientSource.includes('Math.max(64, input.scrollHeight)')) throw new Error('edit textarea must grow from scrollHeight')
 if (!clientSource.includes('calc(var(--dsh-composer-side-clearance) + 12px)')) {
@@ -263,9 +264,44 @@ if (!text7.includes('第一行')) throw new Error('multi-line objective missing 
 if (!text7.includes('第二行')) throw new Error('multi-line objective missing line 2: ' + text7)
 if (!text7.includes('第三行')) throw new Error('multi-line objective missing line 3: ' + text7)
 
-// ---- 文件标签页：只读预览（无编辑/保存），四种格式渲染器接线 ----
-if (clientSource.includes("rpc('write'")) throw new Error('preview-only: client must not call write')
-if (clientSource.includes("action: 'write'")) throw new Error('preview-only: no write action usage')
+// ---- 文件标签页：预览 + CodeMirror 6 编辑器接线 ----
+if (!clientSource.includes("require('@codemirror/view')")) throw new Error('editor must use CodeMirror view')
+if (!clientSource.includes("require('@codemirror/state')")) throw new Error('editor must use CodeMirror state')
+if (!clientSource.includes('new EditorView')) throw new Error('editor must create a CodeMirror EditorView')
+if (!clientSource.includes('EditorView.lineNumbers()')) throw new Error('editor must render native CodeMirror line numbers')
+if (clientSource.includes('scrollPastEnd')) throw new Error('editor must stop at the real document bottom like preview mode')
+if (!clientSource.includes("{ key: 'Mod-s'")) throw new Error('editor must keep Mod-S save')
+if (!clientSource.includes('function codeMirrorLanguage')) throw new Error('editor language dispatch missing')
+if (!clientSource.includes('function scheduleAutoSave')) throw new Error('auto save scheduling missing')
+if (!clientSource.includes('AUTO_SAVE_DELAY_MS = 5000')) throw new Error('auto save delay must be five seconds')
+if (!clientSource.includes('function manuallySaveFile')) throw new Error('manual save must be distinguishable from auto-save')
+if (!clientSource.includes('function showSavedIndicator')) throw new Error('manual save success indicator missing')
+if (!clientSource.includes("T('files.saved')")) throw new Error('saved indicator label missing')
+if (!clientSource.includes('currentSignature.m === entry.baseMtime')) {
+  throw new Error('auto refresh must ignore signatures produced by the editor itself')
+}
+if (!clientBundle.includes('@lezer/highlight')) throw new Error('bundled editor must include Lezer highlight tags')
+if (!clientBundle.includes('PREVIEW_HIGHLIGHT_STYLE')) throw new Error('bundled editor must use preview-aligned highlighting')
+if (!clientBundle.includes('PREVIEW_JSON_HIGHLIGHT_STYLE')) throw new Error('bundled JSON editor must use JSON preview highlighting')
+if (!clientBundle.includes('body[data-ds-dark-theme] .dfv-cm-editor')) {
+  throw new Error('bundled editor must follow the DSH light/dark theme marker')
+}
+if (!clientBundle.includes('--dsh-soup-code-cursor:#1f2328') || !clientBundle.includes('--dsh-soup-code-cursor:#f9fafb')) {
+  throw new Error('bundled editor must provide light and dark cursor palettes')
+}
+if (!clientBundle.includes('.cm-cursor{border-left-color:var(--dsh-soup-code-cursor)!important;}')) {
+  throw new Error('bundled editor must style the CodeMirror cursor')
+}
+if (!clientSource.includes("color: 'var(--dsh-soup-code-variable)'") || !clientSource.includes("color: 'var(--dsh-soup-code-function)'")) {
+  throw new Error('bundled editor must use theme-aware variable and function colors')
+}
+if (!clientSource.includes("color: 'var(--dsh-soup-json-property)'") || !clientSource.includes("color: 'var(--dsh-soup-json-literal)'")) {
+  throw new Error('bundled JSON editor must use theme-aware JSON colors')
+}
+if (!clientBundle.includes('padding:0 8px 0 12px')) throw new Error('bundled editor gutter must match preview padding')
+if (!clientBundle.includes('create(CodeWithLines, { text }, create(JsonPreview, { text }))')) {
+  throw new Error('bundled JSON preview must render line numbers')
+}
 if (!clientSource.includes("sandbox: 'allow-scripts allow-popups allow-forms allow-modals'")) throw new Error('html preview must sandbox scripts without allow-same-origin')
 if (!clientSource.includes('srcDoc')) throw new Error('html preview must inject via srcDoc')
 if (!clientSource.includes('function parseDelimited')) throw new Error('csv preview needs the RFC4180 parser')
@@ -335,7 +371,7 @@ if (!clientSource.includes("create('div', { className: 'dfv-header' }")) throw n
 if (!clientSource.includes('function usePreviewReadingMode')) throw new Error('reading-mode hook missing')
 if (!clientSource.includes('.wSkVaW_composerSeat')) throw new Error('reading-mode must hide composer seat')
 if (!clientSource.includes('.FJxK0a_root')) throw new Error('reading-mode must hide stats line')
-if (!clientSource.includes('create(CodeBlock, { code: entry.content, lang: lang })')) throw new Error('code preview must reuse DSH CodeBlock (shiki)')
+if (!clientSource.includes('create(CodeBlock, { code: text, lang: lang })')) throw new Error('code preview must reuse DSH CodeBlock (shiki)')
 if (!clientSource.includes("py: 'py', rb: 'rb', go: 'go', rs: 'rs'")) throw new Error('code language table must cover common languages')
 if (!clientSource.includes('CODE_HIGHLIGHT_MAX_CHARS')) throw new Error('code highlight needs a size guard')
 if (!clientSource.includes("CSV_MAX_ROWS = 500")) throw new Error('csv preview must cap rendered rows')
@@ -369,4 +405,4 @@ if (!clientSource.includes('function nbPickMime')) throw new Error('notebook out
 const indexSource = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
 if (!indexSource.includes('NB_MAX_BYTES = 20 * 1024 * 1024')) throw new Error('notebook cap must be 20MB')
 
-console.log('CLIENT GOAL OK: phase labels, button state machine, no-goal/complete null, edit view, multi-line objective, files preview-only(md/html/json/csv)')
+console.log('CLIENT GOAL OK: phase labels, button state machine, no-goal/complete null, edit view, multi-line objective, files preview + edit (md/html/json/csv)')

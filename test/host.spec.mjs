@@ -58,21 +58,23 @@ const GOOD_HEADERS = {
 }
 
 function call(body, opts = {}) {
-  const res = {
-    writeHead: (c, h) => { res.code = c; res.headers = h },
-    setHeader: (k, v) => { res.headers = Object.assign({}, res.headers, { [k]: v }) },
-    end: (b) => { res.body = JSON.parse(b) },
-  }
-  const payload = JSON.stringify(body)
-  captured.handler({
-    method: opts.method || 'POST',
-    headers: opts.headers || GOOD_HEADERS,
-    on: (ev, fn) => {
-      if (ev === 'data') setTimeout(() => fn(Buffer.from(payload)), 0)
-      if (ev === 'end') setTimeout(() => fn(), 1)
-    },
-  }, res)
-  return new Promise((r) => setTimeout(() => r(res), 20))
+  return new Promise((resolve, reject) => {
+    const res = {
+      writeHead: (c, h) => { res.code = c; res.headers = h },
+      setHeader: (k, v) => { res.headers = Object.assign({}, res.headers, { [k]: v }) },
+      end: (b) => { res.body = JSON.parse(b); resolve(res) },
+    }
+    const payload = JSON.stringify(body)
+    captured.handler({
+      method: opts.method || 'POST',
+      headers: opts.headers || GOOD_HEADERS,
+      on: (ev, fn) => {
+        if (ev === 'data') setTimeout(() => fn(Buffer.from(payload)), 0)
+        if (ev === 'end') setTimeout(() => fn(), 1)
+      },
+    }, res)
+    setTimeout(() => reject(new Error('handler timeout')), 1000)
+  })
 }
 
 const r1 = await call({ action: 'root', args: {} })
@@ -148,9 +150,7 @@ await writeFile(secretPath, 'top secret', 'utf8')
 const fRead = await call({ action: 'read', args: { path: secretPath } })
 if (fRead.body.ok || fRead.code !== 403) throw new Error('out-of-root read must 403: ' + JSON.stringify(fRead.body))
 const fWrite = await call({ action: 'write', args: { path: join(OUT, 'pwned.txt'), content: 'x' } })
-if (fWrite.body.ok || !String(fWrite.body.error || '').startsWith('unknown action')) {
-  throw new Error('write must be removed entirely: ' + JSON.stringify(fWrite.body))
-}
+if (fWrite.body.ok || fWrite.code !== 403) throw new Error('out-of-root write must 403: ' + JSON.stringify(fWrite.body))
 const fCreate = await call({ action: 'create', args: { dir: OUT, name: 'x.txt' } })
 if (fCreate.body.ok || fCreate.code !== 403) throw new Error('out-of-root create must 403')
 const fTrash = await call({ action: 'trash', args: { path: secretPath } })
@@ -338,11 +338,25 @@ if ((await readFile(cPath, 'utf8')) !== 'AAAABBBB') throw new Error('chunk2 must
 const dirRead = await call({ action: 'read', args: { path: WORK } })
 if (dirRead.body.ok) throw new Error('directory read should fail')
 
-const wr1 = await call({ action: 'write', args: { path: txtPath, content: 'nope' } })
-if (wr1.body.ok) throw new Error('write should be removed (preview-only): ' + JSON.stringify(wr1.body))
-if (!String(wr1.body.error || '').startsWith('unknown action')) throw new Error('write must be unknown action: ' + JSON.stringify(wr1.body))
+const txtStat = await stat(txtPath)
+const wr1 = await call({ action: 'write', args: {
+  path: txtPath,
+  content: 'saved by editor',
+  expectedMtime: txtStat.mtimeMs,
+  expectedSize: txtStat.size,
+} })
+if (!wr1.body.ok) throw new Error('write should save editor content: ' + JSON.stringify(wr1.body))
+if ((await readFile(txtPath, 'utf8')) !== 'saved by editor') throw new Error('write content mismatch')
+const wrConflict = await call({ action: 'write', args: {
+  path: txtPath,
+  content: 'stale overwrite',
+  expectedMtime: txtStat.mtimeMs,
+  expectedSize: txtStat.size,
+} })
+if (wrConflict.body.ok || !wrConflict.body.conflict) throw new Error('stale write must report conflict')
+if ((await readFile(txtPath, 'utf8')) !== 'saved by editor') throw new Error('conflicting write must preserve content')
 const rd4 = await call({ action: 'read', args: { path: txtPath } })
-if (!rd4.body.ok || rd4.body.content !== 'hello dsh-soup\n第二行') throw new Error('read after removed write must be unchanged')
+if (!rd4.body.ok || rd4.body.content !== 'saved by editor') throw new Error('read after write must return saved content')
 
 const missingRead = await call({ action: 'read', args: { path: join(WORK, 'nope.txt') } })
 if (missingRead.body.ok) throw new Error('missing read should fail')
@@ -440,4 +454,4 @@ if (mtMissing.body.mtimes[join(WORK, 'nope.txt')] !== null) throw new Error('mti
 
 await rm(WORK, { recursive: true, force: true })
 await rm(OUT, { recursive: true, force: true })
-console.log('SMOKE OK: root, sessionCwd, create, upload, move(no-shell), list, open, trash, guard, read(text/image/binary/dir-miss), write-removed(preview-only), speed idle/waiting/streaming-tps/done/stall, gate(origin/header/method), confine(out-of-root/traversal/symlink/session-base), img(200/png-bytes/out-403/non-image-415/cross-site-403), mtime(dir-flag/size/out-null/changed/missing-null)')
+console.log('SMOKE OK: root, sessionCwd, create, upload, move(no-shell), list, open, trash, guard, read/write(text/image/binary/dir-miss), write-conflict, speed idle/waiting/streaming-tps/done/stall, gate(origin/header/method), confine(out-of-root/traversal/symlink/session-base), img(200/png-bytes/out-403/non-image-415/cross-site-403), mtime(dir-flag/size/out-null/changed/missing-null)')
