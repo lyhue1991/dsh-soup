@@ -5,13 +5,13 @@
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "build": "esbuild lib/client.entry.js --bundle --format=iife --platform=browser --target=es2020 --outfile=lib/client.bundle.js",
+    "build": "esbuild lib/client.entry.js --bundle --format=iife --platform=browser --target=es2020 --outfile=lib/client.js",
     "prepublishOnly": "npm run build",
     "test": "npm run build && node --test test/client-goal.spec.mjs test/host.spec.mjs"
   },
   "exports": {
     ".": "./lib/index.js",
-    "./client": "./lib/client.bundle.js",
+    "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },

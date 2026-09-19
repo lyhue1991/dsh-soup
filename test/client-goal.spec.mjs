@@ -239,10 +239,12 @@ function findNodeByType(node, type, out = []) {
 }
 const textarea6 = findNodeByType(card6, 'textarea')[0]
 if (!textarea6 || !textarea6.props.ref) throw new Error('edit textarea should use an auto-height ref')
-const clientSource = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+const clientSource = readFileSync(new URL('../lib/client.main.js', import.meta.url), 'utf8')
 const htmlPreviewSource = readFileSync(new URL('../lib/client/html-preview.js', import.meta.url), 'utf8')
 const stylesSource = readFileSync(new URL('../lib/client/styles.js', import.meta.url), 'utf8')
-const clientBundle = readFileSync(new URL('../lib/client.bundle.js', import.meta.url), 'utf8')
+const clientBundle = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+try { new (await import('node:vm')).Script(clientBundle, { filename: 'lib/client.js' }) }
+catch (error) { throw new Error('lib/client.js must stay a classic-script bundle: ' + error.message) }
 if (!stylesSource.includes('resize:none;overflow:hidden')) throw new Error('edit textarea must disable resize and scrollbar')
 if (!clientSource.includes('Math.max(64, input.scrollHeight)')) throw new Error('edit textarea must grow from scrollHeight')
 if (!stylesSource.includes('calc(var(--dsh-composer-side-clearance) + 12px)')) {
