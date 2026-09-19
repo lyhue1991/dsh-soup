@@ -277,6 +277,25 @@ if (!rd1.body.ok || rd1.body.kind !== 'text') throw new Error('read text fail: '
 if (rd1.body.content !== 'hello dsh-soup\n第二行') throw new Error('read text content mismatch')
 if (rd1.body.truncated) throw new Error('small file must not be truncated')
 
+// ---- read-related：HTML 预览只能读根文档同目录内的静态依赖 ----
+const htmlDir = join(WORK, 'html-preview')
+await mkdir(join(htmlDir, 'assets'), { recursive: true })
+const htmlRoot = join(htmlDir, 'index.html')
+await writeFile(htmlRoot, '<link rel="stylesheet" href="assets/site.css">', 'utf8')
+await writeFile(join(htmlDir, 'assets', 'site.css'), 'body{color:green}', 'utf8')
+const relOk = await call({ action: 'read-related', args: { path: htmlRoot, relativePath: 'assets/site.css', sessionId: 's1' } })
+if (!relOk.body.ok || Buffer.from(relOk.body.data, 'base64').toString('utf8') !== 'body{color:green}') {
+  throw new Error('read-related must return same-directory asset: ' + JSON.stringify(relOk.body))
+}
+const relUp = await call({ action: 'read-related', args: { path: htmlRoot, relativePath: '../bin.dat', sessionId: 's1' } })
+if (relUp.body.ok) throw new Error('read-related must reject parent traversal: ' + JSON.stringify(relUp.body))
+const relAbs = await call({ action: 'read-related', args: { path: htmlRoot, relativePath: txtPath, sessionId: 's1' } })
+if (relAbs.body.ok) throw new Error('read-related must reject absolute paths: ' + JSON.stringify(relAbs.body))
+const tooLargeAsset = join(htmlDir, 'large.js')
+await writeFile(tooLargeAsset, Buffer.alloc(4 * 1024 * 1024 + 1))
+const relLarge = await call({ action: 'read-related', args: { path: htmlRoot, relativePath: 'large.js', sessionId: 's1' } })
+if (relLarge.body.ok) throw new Error('read-related must cap a single asset at 4 MB: ' + JSON.stringify(relLarge.body))
+
 const pngPath = join(WORK, 'pixel.png')
 await writeFile(pngPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03]))
 const rd2 = await call({ action: 'read', args: { path: pngPath } })

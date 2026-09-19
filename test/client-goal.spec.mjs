@@ -302,8 +302,18 @@ if (!clientBundle.includes('padding:0 8px 0 12px')) throw new Error('bundled edi
 if (!clientBundle.includes('create(CodeWithLines, { text }, create(JsonPreview, { text }))')) {
   throw new Error('bundled JSON preview must render line numbers')
 }
-if (!clientSource.includes("sandbox: 'allow-scripts allow-popups allow-forms allow-modals'")) throw new Error('html preview must sandbox scripts without allow-same-origin')
-if (!clientSource.includes('srcDoc')) throw new Error('html preview must inject via srcDoc')
+if (!clientSource.includes("sandbox: 'allow-scripts allow-popups allow-forms allow-modals'")) {
+  throw new Error('html preview must sandbox scripts without allow-same-origin')
+}
+if (!clientSource.includes('function packHtmlPreview')) throw new Error('html preview must pack same-directory static assets')
+if (!clientSource.includes("rpc('read-related'")) throw new Error('html preview must read related assets through the host RPC')
+if (!clientSource.includes('function inlinePackedHtml')) throw new Error('html preview must inline packed local resources for Desktop compatibility')
+if (!clientSource.includes("scripts[j].removeAttribute('src')")) throw new Error('html preview must preserve classic script ordering by inlining')
+if (!clientSource.includes("'data-html-preview-fallback': true")) throw new Error('html preview must retain the legacy fallback')
+if (!clientSource.includes('return bundle.html')) throw new Error('external-only HTML must retain its original srcDoc context')
+if (!clientSource.includes('HTML_MAX_ASSETS = 64') || !clientSource.includes('HTML_TOTAL_MAX_BYTES = 32 * 1024 * 1024')) {
+  throw new Error('html preview must retain official resource limits')
+}
 if (!clientSource.includes('function parseDelimited')) throw new Error('csv preview needs the RFC4180 parser')
 if (!clientSource.includes('function previewKind')) throw new Error('preview dispatch by extension missing')
 if (!clientSource.includes('jsonColorNodes')) throw new Error('json preview colorizer missing')
