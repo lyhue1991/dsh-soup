@@ -239,7 +239,15 @@ function findNodeByType(node, type, out = []) {
 }
 const textarea6 = findNodeByType(card6, 'textarea')[0]
 if (!textarea6 || !textarea6.props.ref) throw new Error('edit textarea should use an auto-height ref')
-const clientSource = readFileSync(new URL('../lib/client.main.js', import.meta.url), 'utf8')
+// 重构拆分后，客户端源码分布在 main 与 client/ 各模块；断言覆盖拼接后的
+// 全量客户端源码（等价于旧单文件 main 的检查范围，不因拆分而削弱）。
+const clientSource = [
+  'lib/client.main.js',
+  'lib/client/file-address.js',
+  'lib/client/preview-renderers.js',
+  'lib/client/speed-badge.js',
+  'lib/client/goal-bar.js',
+].map((f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8')).join('\n')
 const htmlPreviewSource = readFileSync(new URL('../lib/client/html-preview.js', import.meta.url), 'utf8')
 const stylesSource = readFileSync(new URL('../lib/client/styles.js', import.meta.url), 'utf8')
 const clientBundle = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
