@@ -387,7 +387,6 @@ if (!clientSource.includes('function usePreviewReadingMode')) throw new Error('r
 if (!stylesSource.includes('.wSkVaW_composerSeat')) throw new Error('reading-mode must hide composer seat')
 if (!stylesSource.includes('.FJxK0a_root')) throw new Error('reading-mode must hide stats line')
 if (!clientSource.includes('create(CodeBlock, { code: text, lang: lang })')) throw new Error('code preview must reuse DSH CodeBlock (shiki)')
-if (!clientSource.includes("py: 'py', rb: 'rb', go: 'go', rs: 'rs'")) throw new Error('code language table must cover common languages')
 if (!clientSource.includes('CODE_HIGHLIGHT_MAX_CHARS')) throw new Error('code highlight needs a size guard')
 if (!clientSource.includes("CSV_MAX_ROWS = 500")) throw new Error('csv preview must cap rendered rows')
 if (!clientSource.includes('FILES_MAX_OPEN = 5')) throw new Error('preview tabs must cap at 5 (FIFO)')
@@ -396,6 +395,15 @@ if (!clientSource.includes('pruneFilesToScope(state.files, cwd)')) throw new Err
 if (!clientSource.includes('function NotebookPreview')) throw new Error('ipynb preview component missing')
 if (!clientSource.includes("ext === 'ipynb'")) throw new Error('previewKind must map .ipynb to notebook')
 const fileIconsSource = readFileSync(new URL('../lib/client/file-icons.js', import.meta.url), 'utf8')
+if (!fileIconsSource.includes("py: 'py', rb: 'rb', go: 'go', rs: 'rs'")) throw new Error('code language table must cover common languages')
+const fileIcons = await import('../lib/client/file-icons.js')
+for (const name of ['a.md', 'x.ts', 'y.lua', 'LICENSE', 'noext', 'z.jpg']) {
+  const svg = fileIcons.iconSvgFor({ type: 'file', name })
+  if (typeof svg !== 'string' || svg.length === 0) throw new Error('iconSvgFor must resolve: ' + name)
+}
+if (fileIcons.iconSvgFor({ type: 'directory', name: 'd', open: true }) !== fileIcons.NB_SVG.folderFavorite) {
+  throw new Error('open directory must use folderFavorite')
+}
 if (!fileIconsSource.includes('export function iconSvgFor')) throw new Error('jupyterlab-style icon resolver missing')
 if (!fileIconsSource.includes('node.open ? NB_SVG.folderFavorite : NB_SVG.folder')) throw new Error('directory icon must switch on expanded state')
 if (!fileIconsSource.includes('folderFavorite: ')) throw new Error('folder-favorite svg missing')
