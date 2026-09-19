@@ -247,6 +247,8 @@ const clientSource = [
   'lib/client/preview-renderers.js',
   'lib/client/speed-badge.js',
   'lib/client/goal-bar.js',
+  'lib/client/files-store.js',
+  'lib/client/files-view.js',
 ].map((f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8')).join('\n')
 const htmlPreviewSource = readFileSync(new URL('../lib/client/html-preview.js', import.meta.url), 'utf8')
 const stylesSource = readFileSync(new URL('../lib/client/styles.js', import.meta.url), 'utf8')
