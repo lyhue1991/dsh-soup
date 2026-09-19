@@ -249,6 +249,8 @@ const clientSource = [
   'lib/client/goal-bar.js',
   'lib/client/files-store.js',
   'lib/client/files-view.js',
+  'lib/client/explorer-data.js',
+  'lib/client/explorer-view.js',
 ].map((f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8')).join('\n')
 const htmlPreviewSource = readFileSync(new URL('../lib/client/html-preview.js', import.meta.url), 'utf8')
 const stylesSource = readFileSync(new URL('../lib/client/styles.js', import.meta.url), 'utf8')
@@ -337,7 +339,7 @@ if (!clientSource.includes('/api/dsh-soup/img?p=')) throw new Error('markdown re
 if (!clientSource.includes("rpc('mtime'")) throw new Error('auto refresh must poll the mtime probe action')
 if (!clientSource.includes('function autoRefreshTick')) throw new Error('auto refresh tick missing')
 if (!clientSource.includes('AUTO_REFRESH_MS = 3000')) throw new Error('auto refresh interval missing')
-if (!clientSource.includes('if (!state.open && state.files.list.length === 0) return')) throw new Error('auto refresh must idle when panel closed and no previews')
+if (!clientSource.includes("if (!getState().open && getState().files.list.length === 0) return 'idle'")) throw new Error('auto refresh must idle when panel closed and no previews')
 if (!clientSource.includes('lastMtimes = {}')) throw new Error('session switch must reset mtime baselines')
 if (!clientSource.includes('function autoHeartbeat')) throw new Error('auto refresh heartbeat missing')
 if (!clientSource.includes('AUTO_HEARTBEAT_MS = 1000')) throw new Error('auto refresh heartbeat interval missing')
@@ -364,7 +366,7 @@ if (!clientSource.includes('if (item.isDir) rekeyExpandedPaths(item.from, item.t
 if (!clientSource.includes("title: T('explorer.refreshTitle')")) throw new Error('refresh button must use the i18n title key')
 if (!clientSource.includes("title: T('explorer.newFolderTitle')")) throw new Error('new-folder button must use the i18n title key')
 if (!stylesSource.includes('export var ICON_NEW_FOLDER')) throw new Error('toolbar new-folder svg icon missing')
-if (!clientSource.includes("startNew(state.cwd, true)")) throw new Error('toolbar new-folder button must use the shared inline creation flow')
+if (!clientSource.includes("startNew(getState().cwd, true)")) throw new Error('toolbar new-folder button must use the shared inline creation flow')
 const i18nSource = readFileSync(new URL('../lib/client/i18n.js', import.meta.url), 'utf8')
 if (!i18nSource.includes("export var NS = 'dsh-soup'")) throw new Error('i18n namespace missing')
 if (!i18nSource.includes('export var DICT = {')) throw new Error('i18n dictionary missing')
@@ -385,8 +387,8 @@ if (!clientSource.includes('setFrameWidth(DETAILS_DEFAULT)')) throw new Error('r
 if (!clientSource.includes("slots.inject('rightbar'")) throw new Error('dsh-soup must replace the official rightbar occupant')
 if (!clientSource.includes("name: 'rightbar', priority: -1")) throw new Error('rightbar replacement must have lower priority than the official occupant')
 if (!clientSource.includes("slots.inject('rightbar'") || !clientSource.includes("create(PreviewOverlay)")) throw new Error('rightbar replacement must keep the blank-session preview overlay')
-if (!clientSource.includes('layout.openRightbar(true, false)')) throw new Error('rightbar toggle must use the 0.1.5 layout API')
-if (!clientSource.includes('layout.closeRightbar()')) throw new Error('rightbar close must use the 0.1.5 layout API')
+if (!clientSource.includes('getLayout().openRightbar(true, false)')) throw new Error('rightbar toggle must use the 0.1.5 layout API')
+if (!clientSource.includes('getLayout().closeRightbar()')) throw new Error('rightbar close must use the 0.1.5 layout API')
 if (!clientSource.includes('[data-sidebar-right-expand]')) throw new Error('official rightbar expand button must be unified with dsh-soup')
 if (!clientSource.includes('stopImmediatePropagation')) throw new Error('official rightbar action must be intercepted')
 if (!stylesSource.includes('[data-sidebar-right-expand],[data-sidebar-right-expand-placeholder]{display:none!important;}')) throw new Error('official rightbar expand control must be hidden')
@@ -401,7 +403,7 @@ if (!clientSource.includes('CODE_HIGHLIGHT_MAX_CHARS')) throw new Error('code hi
 if (!clientSource.includes("CSV_MAX_ROWS = 500")) throw new Error('csv preview must cap rendered rows')
 if (!clientSource.includes('FILES_MAX_OPEN = 5')) throw new Error('preview tabs must cap at 5 (FIFO)')
 if (!clientSource.includes('function pruneFilesToScope')) throw new Error('session switch must prune out-of-scope previews')
-if (!clientSource.includes('pruneFilesToScope(state.files, cwd)')) throw new Error('trackSession must apply scope pruning')
+if (!clientSource.includes('pruneFilesToScope(getState().files, cwd)')) throw new Error('trackSession must apply scope pruning')
 if (!clientSource.includes('function NotebookPreview')) throw new Error('ipynb preview component missing')
 if (!clientSource.includes("ext === 'ipynb'")) throw new Error('previewKind must map .ipynb to notebook')
 const fileIconsSource = readFileSync(new URL('../lib/client/file-icons.js', import.meta.url), 'utf8')
