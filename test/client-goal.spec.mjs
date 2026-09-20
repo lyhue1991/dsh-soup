@@ -318,6 +318,15 @@ if (!clientBundle.includes('padding:0 8px 0 12px')) throw new Error('bundled edi
 if (!clientBundle.includes('create(CodeWithLines, { text }, create(JsonPreview, { text }))')) {
   throw new Error('bundled JSON preview must render line numbers')
 }
+if (!clientSource.includes('JSON_PREVIEW_MAX_CHARS = 300000')) {
+  throw new Error('JSON preview needs a bounded text size')
+}
+if (!clientSource.includes('text.slice(0, JSON_PREVIEW_MAX_CHARS)')) {
+  throw new Error('oversized JSON preview must render only a bounded prefix')
+}
+if (!clientSource.includes("T('files.jsonTruncated', { n: JSON_PREVIEW_MAX_CHARS })")) {
+  throw new Error('oversized JSON preview needs a truncation notice')
+}
 if (!htmlPreviewSource.includes("sandbox: 'allow-scripts allow-popups allow-forms allow-modals'")) {
   throw new Error('html preview must sandbox scripts without allow-same-origin')
 }
