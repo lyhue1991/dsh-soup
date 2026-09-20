@@ -432,7 +432,13 @@ if (!fileIconsSource.includes('jp-notebook-icon-color')) throw new Error('notebo
 if (!clientSource.includes('dangerouslySetInnerHTML: { __html: iconSvgFor(node) }')) throw new Error('tree rows must render svg icons')
 if (!stylesSource.includes('.expl-icon svg{width:16px;height:16px;display:block;}')) throw new Error('svg icon sizing css missing')
 if (!clientSource.includes("function copyPath(target)")) throw new Error('copyPath must take explicit node (menu closes before click)')
-if (!clientSource.includes("label: T('menu.download')")) throw new Error('download menu item must use the i18n label key')
+if (!clientSource.includes("T('menu.download')")) throw new Error('download actions must use the i18n label key')
+if (!i18nSource.includes("'menu.download': '⬇ 下载'")) throw new Error('download actions must mirror the upload arrow glyph')
+if (!clientSource.includes("T('files.downloadTitle')")) throw new Error('preview download button needs a tooltip')
+if (!clientSource.includes('downloadFile(active.path)')) throw new Error('preview download button must use the active file action')
+if (!clientSource.includes('active.loaded && !active.editing && !active.dirty && !active.saving')) {
+  throw new Error('preview download button must hide during editing or saving')
+}
 if (!clientSource.includes("T('explorer.uploaded', { n: okCount })")) throw new Error('upload completion must interpolate the uploaded count')
 if (!clientSource.includes("T('explorer.downloaded', { n: okCount })")) throw new Error('download completion must interpolate the downloaded count')
 if (!i18nSource.includes("'explorer.overwriteConfirm': '文件“{name}”已存在，是否覆盖？'")) throw new Error('overwrite confirmation must have Chinese translation')
