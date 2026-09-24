@@ -1,0 +1,4 @@
+interface:
+  display_name: "DSH 插件调试"
+  short_description: "DeepSeek Harness 桌面端调试：CDP 探针、重启验证、槽位排查"
+  default_prompt: "帮我排查 DeepSeek Harness 插件/界面的问题"
