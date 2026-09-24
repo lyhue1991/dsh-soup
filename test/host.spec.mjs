@@ -17,6 +17,8 @@ let spawned = []
 const sessionHeaders = new Map([['s1', WORK]])
 // 模拟注册滞后：出现在 get 但暂不在 list 里的会话
 const hiddenFromList = new Set()
+// 持久化层：活注册表查不到时的冷会话 header 兜底（sessionHeaders 有 → 冷态模拟用 delete + 这里 put）
+const persistedHeaders = new Map()
 const ctx = {
   effect: (fn) => { const d = fn(); return () => { if (d) d() } },
   on: (name, fn) => { if (name === 'llm/stream') streamListener = fn; return () => { if (name === 'llm/stream') streamListener = null } },
@@ -44,6 +46,9 @@ const ctx = {
       .filter(([id]) => !hiddenFromList.has(id))
       .map(([id, cwd]) => ({ id, header: { cwd } })),
   },
+  get: (key) => key === 'sessionPersistence'
+    ? { stat: async (id) => persistedHeaders.has(id) ? { header: { cwd: persistedHeaders.get(id) } } : undefined }
+    : undefined,
 }
 apply(ctx)
 if (!captured) throw new Error('route not registered')
@@ -203,6 +208,18 @@ const raceWithId = await call({ action: 'list', args: { path: OUT, sessionId: 's
 if (!raceWithId.body.ok) throw new Error('sessionId direct-lookup must allow: ' + JSON.stringify(raceWithId.body))
 hiddenFromList.delete('s9')
 sessionHeaders.delete('s9')
+
+// 冷会话兜底：活注册表与 get 均查不到，但持久化层有 header → 凭 sessionId 放行
+persistedHeaders.set('s10', OUT)
+const coldNoId = await call({ action: 'list', args: { path: OUT } })
+if (coldNoId.body.ok || coldNoId.code !== 403) throw new Error('cold session without sessionId must stay confined')
+const coldWithId = await call({ action: 'list', args: { path: OUT, sessionId: 's10' } })
+if (!coldWithId.body.ok) throw new Error('cold session persistence fallback must allow: ' + JSON.stringify(coldWithId.body))
+const coldUnknown = await call({ action: 'list', args: { path: OUT, sessionId: 'ghost' } })
+if (coldUnknown.body.ok || coldUnknown.code !== 403) throw new Error('unknown session must stay confined')
+persistedHeaders.delete('s10')
+const coldRevoked = await call({ action: 'list', args: { path: OUT, sessionId: 's10' } })
+if (coldRevoked.body.ok || coldRevoked.code !== 403) throw new Error('removed cold session must re-confine')
 
 const r7 = await call({ action: 'unknown', args: {} })
 if (r7.body.ok) throw new Error('unknown should fail')
@@ -513,4 +530,4 @@ if (mtMissing.body.mtimes[join(WORK, 'nope.txt')] !== null) throw new Error('mti
 
 await rm(WORK, { recursive: true, force: true })
 await rm(OUT, { recursive: true, force: true })
-console.log('SMOKE OK: root, sessionCwd, create, upload, move(no-shell), list, open, trash, guard, read/write(text/image/binary/dir-miss), write-conflict, speed idle/waiting/streaming-tps/done/stall, gate(origin/header/method), confine(out-of-root/traversal/symlink/session-base), img(200/png-bytes/out-403/non-image-415/cross-site-403), mtime(dir-flag/size/out-null/changed/missing-null)')
+console.log('SMOKE OK: root, sessionCwd, create, upload, move(no-shell), list, open, trash, guard, read/write(text/image/binary/dir-miss), write-conflict, speed idle/waiting/streaming-tps/done/stall, gate(origin/header/method), confine(out-of-root/traversal/symlink/session-base/cold-fallback), img(200/png-bytes/out-403/non-image-415/cross-site-403), mtime(dir-flag/size/out-null/changed/missing-null)')
