@@ -257,6 +257,10 @@ const stylesSource = readFileSync(new URL('../lib/client/styles.js', import.meta
 const clientBundle = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
 try { new (await import('node:vm')).Script(clientBundle, { filename: 'lib/client.js' }) }
 catch (error) { throw new Error('lib/client.js must stay a classic-script bundle: ' + error.message) }
+if (!clientSource.includes("name: 'conversation.session.header.actions', id: 'dsh-speed-badge'")) throw new Error('speed badge must ride the session header actions slot')
+if (!clientSource.includes("slots.inject('conversation.session.header.actions'")) throw new Error('speed badge entry must be bound to session scope via slots.inject (two-phase register)')
+if (!clientSource.includes("rpc('speed-status'")) throw new Error('speed badge must poll the speed-status action')
+if (!clientSource.includes("status.phase === 'waiting'")) throw new Error('speed badge must render the waiting phase')
 if (!stylesSource.includes('resize:none;overflow:hidden')) throw new Error('edit textarea must disable resize and scrollbar')
 if (!clientSource.includes('Math.max(64, input.scrollHeight)')) throw new Error('edit textarea must grow from scrollHeight')
 if (!stylesSource.includes('calc(var(--dsh-composer-side-clearance) + 12px)')) {
@@ -315,7 +319,7 @@ if (!clientSource.includes("color: 'var(--dsh-soup-json-property)'") || !clientS
   throw new Error('bundled JSON editor must use theme-aware JSON colors')
 }
 if (!clientBundle.includes('padding:0 8px 0 12px')) throw new Error('bundled editor gutter must match preview padding')
-if (!clientBundle.includes('create(CodeWithLines, { text }, create(JsonPreview, { text }))')) {
+if (!clientBundle.includes('create(CodeWithLines, { text }, create(JsonPreview, { text }))') && !clientBundle.includes('create2(CodeWithLines, { text }, create2(JsonPreview, { text }))')) {
   throw new Error('bundled JSON preview must render line numbers')
 }
 if (!clientSource.includes('JSON_PREVIEW_MAX_CHARS = 300000')) {
@@ -346,6 +350,9 @@ if (!clientSource.includes('create(MarkdownText, { text: md })')) throw new Erro
 if (!clientSource.includes('absolutizeMarkdownImages')) throw new Error('markdown preview must absolutize relative image srcs')
 if (!clientSource.includes('/api/dsh-soup/img?p=')) throw new Error('markdown relative images must point at the img endpoint')
 if (!clientSource.includes("rpc('mtime'")) throw new Error('auto refresh must poll the mtime probe action')
+if (!clientSource.includes("rpc('mtime', { paths: paths, sessionId: getActiveSessionId() })")) throw new Error('mtime probe must carry the active session boundary')
+if (!clientSource.includes('(attempt || 0) < 6')) throw new Error('explorer must retry session-attach window with extended backoff')
+if (!clientSource.includes('setTimeout(r, 1000)')) throw new Error('explorer retry backoff must be 1s per attempt')
 if (!clientSource.includes('function autoRefreshTick')) throw new Error('auto refresh tick missing')
 if (!clientSource.includes('AUTO_REFRESH_MS = 3000')) throw new Error('auto refresh interval missing')
 if (!clientSource.includes("if (!getState().open && getState().files.list.length === 0) return 'idle'")) throw new Error('auto refresh must idle when panel closed and no previews')
