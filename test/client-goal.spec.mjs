@@ -434,6 +434,11 @@ if (!stylesSource.includes('.expl-icon svg{width:16px;height:16px;display:block;
 if (!clientSource.includes("function copyPath(target)")) throw new Error('copyPath must take explicit node (menu closes before click)')
 if (!clientSource.includes("T('menu.download')")) throw new Error('download actions must use the i18n label key')
 if (!i18nSource.includes("'menu.download': '⬇ 下载'")) throw new Error('download actions must mirror the upload arrow glyph')
+if (!clientSource.includes("T('menu.upload')")) throw new Error('folder context menu must expose upload action')
+if (!clientSource.includes('chooseUploadDir(node.path)')) throw new Error('folder upload must target the selected directory')
+if (!clientSource.includes('uploadFiles(targetDir || getState().cwd, files)')) throw new Error('picker upload must use its selected target directory')
+if (!clientSource.includes('sessionId: getActiveSessionId()')) throw new Error('uploads must stay within the active session boundary')
+if (!i18nSource.includes("'menu.upload': '⬆ 上传文件'")) throw new Error('folder upload menu must have Chinese translation')
 if (!clientSource.includes("T('files.downloadTitle')")) throw new Error('preview download button needs a tooltip')
 if (!clientSource.includes('downloadFile(active.path)')) throw new Error('preview download button must use the active file action')
 if (!clientSource.includes('active.loaded && !active.editing && !active.dirty && !active.saving')) {

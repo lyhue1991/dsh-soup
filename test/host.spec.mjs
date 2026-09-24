@@ -253,6 +253,46 @@ try { await it2.return() } catch {}
 const afterBreak = await call({ action: 'speed-status', args: { sessionId: 's10' } })
 if (afterBreak.body.phase !== 'done') throw new Error('expected done after break, got ' + afterBreak.body.phase)
 
+// 思考流字段也必须计入吞吐：不同适配器可能放在 reasoning_content/reasoningContent。
+const reasoningOptions = { sessionId: 's10-reasoning' }
+const reasoningStream = (async function* () {
+  yield { delta: { reasoning_content: '先分析，再回答' } }
+})()
+const wrappedReasoning = streamListener(reasoningOptions, () => Promise.resolve(reasoningStream))
+const reasoningIt = wrappedReasoning[Symbol.asyncIterator]()
+await reasoningIt.next()
+const reasoningStatus = await call({ action: 'speed-status', args: { sessionId: 's10-reasoning' } })
+if (reasoningStatus.body.phase !== 'streaming' || !(reasoningStatus.body.tokens > 0)) {
+  throw new Error('reasoning chunks must count as streaming output: ' + JSON.stringify(reasoningStatus.body))
+}
+try { await reasoningIt.return() } catch {}
+
+// 同一 session 的重叠流：旧流结束不能把新流误标成 done。
+const overlapOptions = { sessionId: 's10-overlap' }
+let releaseOld = null
+const oldGate = new Promise((resolve) => { releaseOld = resolve })
+const oldStream = (async function* () {
+  yield { delta: { reasoning_content: '旧流' } }
+  await oldGate
+})()
+const oldWrapped = streamListener(overlapOptions, () => Promise.resolve(oldStream))
+const oldIt = oldWrapped[Symbol.asyncIterator]()
+await oldIt.next()
+const newStream = (async function* () {
+  yield { delta: { reasoning_content: '新流持续思考' } }
+  await new Promise(() => {})
+})()
+const newWrapped = streamListener(overlapOptions, () => Promise.resolve(newStream))
+const newIt = newWrapped[Symbol.asyncIterator]()
+await newIt.next()
+releaseOld()
+await oldIt.return()
+const overlapStatus = await call({ action: 'speed-status', args: { sessionId: 's10-overlap' } })
+if (overlapStatus.body.phase !== 'streaming') {
+  throw new Error('old overlapping stream must not finish the new stream: ' + JSON.stringify(overlapStatus.body))
+}
+try { await newIt.return() } catch {}
+
 // ---- 停顿检测：流中超过 STALL_MS 无新 chunk 应回到 waiting，而不是衰减的 t/s ----
 const options3 = { sessionId: 's11' }
 const stalledStream = (async function* () {
