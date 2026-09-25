@@ -333,6 +333,22 @@ if (concurrentStatus.body.phase !== 'streaming') {
 }
 try { await mainIt.return() } catch {}
 
+// 会话隔离：A 会话有活跃流时，查询其他会话（或未知会话）必须 idle，
+// 不得把 A 的状态漏给 B（跨会话徽标串扰的根因）。
+const isoOptions = { sessionId: 's10-iso-a' }
+const isoStream = (async function* () {
+  yield { delta: { content: 'A 会话输出' } }
+  await new Promise(() => {})
+})()
+const isoWrapped = streamListener(isoOptions, () => Promise.resolve(isoStream))
+const isoIt = isoWrapped[Symbol.asyncIterator]()
+await isoIt.next()
+const otherStatus = await call({ action: 'speed-status', args: { sessionId: 's10-iso-b' } })
+if (otherStatus.body.phase !== 'idle') {
+  throw new Error('another session must not see session A traffic: ' + JSON.stringify(otherStatus.body))
+}
+try { await isoIt.return() } catch {}
+
 // ---- 停顿检测：流中超过 STALL_MS 无新 chunk 应回到 waiting，而不是衰减的 t/s ----
 const options3 = { sessionId: 's11' }
 const stalledStream = (async function* () {
