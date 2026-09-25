@@ -310,6 +310,29 @@ if (overlapStatus.body.phase !== 'streaming') {
 }
 try { await newIt.return() } catch {}
 
+// 并发流（同一 session）：后台任务的短流先结束，主回复流继续 —— 结束的
+// 后台流不得把主回复拖成 done（徽标消失的根因）。
+const concurrentOptions = { sessionId: 's10-concurrent' }
+const mainStream = (async function* () {
+  yield { delta: { content: '主回复' } }
+  await new Promise(() => {})
+})()
+const mainWrapped = streamListener(concurrentOptions, () => Promise.resolve(mainStream))
+const mainIt = mainWrapped[Symbol.asyncIterator]()
+await mainIt.next()
+const bgStream = (async function* () {
+  yield { delta: { content: '后台' } }
+})()
+const bgWrapped = streamListener(concurrentOptions, () => Promise.resolve(bgStream))
+const bgIt = bgWrapped[Symbol.asyncIterator]()
+await bgIt.next()
+await bgIt.return() // 后台流完成
+const concurrentStatus = await call({ action: 'speed-status', args: { sessionId: 's10-concurrent' } })
+if (concurrentStatus.body.phase !== 'streaming') {
+  throw new Error('settled background stream must not hide the live main reply: ' + JSON.stringify(concurrentStatus.body))
+}
+try { await mainIt.return() } catch {}
+
 // ---- 停顿检测：流中超过 STALL_MS 无新 chunk 应回到 waiting，而不是衰减的 t/s ----
 const options3 = { sessionId: 's11' }
 const stalledStream = (async function* () {
