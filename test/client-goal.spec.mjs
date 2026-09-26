@@ -412,7 +412,7 @@ if (!stylesSource.includes(".expl-btn{width:26px;height:26px;")) throw new Error
 if (!stylesSource.includes('.dfv-btn{flex:none;display:inline-flex')) throw new Error('preview reload button must be flex icon+label')
 if (!clientSource.includes('var DETAILS_MIN = 300')) throw new Error('details width must use host contract minimum')
 if (!clientSource.includes('var DETAILS_MAX = 520')) throw new Error('details width must use host contract maximum')
-if (!clientSource.includes('var DETAILS_DEFAULT = 360')) throw new Error('details width must use host contract default')
+if (!clientSource.includes('var DETAILS_DEFAULT = 300')) throw new Error('details width must use host contract default')
 if (!clientSource.includes('widthRef.current = last')) throw new Error('details drag must adopt host width instead of resetting it')
 if (!clientSource.includes('if (last < DETAILS_MIN || last > DETAILS_MAX)')) throw new Error('rightbar width must clamp the official viewport-ratio default')
 if (!clientSource.includes('setFrameWidth(DETAILS_DEFAULT)')) throw new Error('rightbar width must initialize to the dsh-soup default')
