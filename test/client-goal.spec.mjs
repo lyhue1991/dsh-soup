@@ -359,8 +359,12 @@ if (!clientSource.includes('function parseDelimited')) throw new Error('csv prev
 if (!clientSource.includes('function previewKind')) throw new Error('preview dispatch by extension missing')
 if (!clientSource.includes('jsonColorNodes')) throw new Error('json preview colorizer missing')
 if (!clientSource.includes('create(MarkdownText, { text: md })')) throw new Error('markdown preview must reuse DSH MarkdownText')
-if (!clientSource.includes('absolutizeMarkdownImages')) throw new Error('markdown preview must absolutize relative image srcs')
-if (!clientSource.includes('/api/dsh-soup/img?p=')) throw new Error('markdown relative images must point at the img endpoint')
+if (!clientSource.includes('function localPathImageUrl')) throw new Error('markdown preview needs the local-path image vocabulary')
+if (!clientSource.includes("new URL('api/file?path=' + encodeURIComponent(abs), document.baseURI).href")) {
+  throw new Error('markdown relative images must resolve through the official api/file route')
+}
+if (!clientSource.includes('pathImages: pathImages')) throw new Error('markdown preview must pass the pathImages vocabulary to MarkdownText')
+if (clientSource.includes('dsh-soup/img?p=')) throw new Error('markdown images must not depend on the dsh-soup img endpoint (rejected by sanitizeUrl under dsh-app://)')
 if (!clientSource.includes("rpc('mtime'")) throw new Error('auto refresh must poll the mtime probe action')
 if (!clientSource.includes("rpc('mtime', { paths: paths, sessionId: getActiveSessionId() })")) throw new Error('mtime probe must carry the active session boundary')
 if (!clientSource.includes('(attempt || 0) < 6')) throw new Error('explorer must retry session-attach window with extended backoff')
