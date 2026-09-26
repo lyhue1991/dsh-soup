@@ -343,6 +343,18 @@ if (!htmlPreviewSource.includes('return bundle.html')) throw new Error('external
 if (!htmlPreviewSource.includes('MAX_ASSETS = 64') || !htmlPreviewSource.includes('TOTAL_MAX_BYTES = 32 * 1024 * 1024')) {
   throw new Error('html preview must retain official resource limits')
 }
+if (!htmlPreviewSource.includes('IMAGE_DATA_MIME') || !htmlPreviewSource.includes(';base64,')) {
+  throw new Error('html preview must inline same-directory relative images as data URLs')
+}
+if (!htmlPreviewSource.includes("'img[src],source[src],video[poster],input[type=\"image\"][src]'")) {
+  throw new Error('html preview must cover relative image elements (img/source/video poster)')
+}
+if (!htmlPreviewSource.includes('img[srcset],source[srcset]')) {
+  throw new Error('html preview must inline responsive srcset image candidates')
+}
+if (!htmlPreviewSource.includes("querySelectorAll('style')") || !htmlPreviewSource.includes("querySelectorAll('[style]'")) {
+  throw new Error('html preview must inline relative background url() images in inline CSS')
+}
 if (!clientSource.includes('function parseDelimited')) throw new Error('csv preview needs the RFC4180 parser')
 if (!clientSource.includes('function previewKind')) throw new Error('preview dispatch by extension missing')
 if (!clientSource.includes('jsonColorNodes')) throw new Error('json preview colorizer missing')

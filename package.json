@@ -7,7 +7,7 @@
   "scripts": {
     "build": "esbuild lib/client.entry.js --bundle --format=iife --platform=browser --target=es2020 --outfile=lib/client.js",
     "prepublishOnly": "npm run build",
-    "test": "npm run build && node --test test/client-goal.spec.mjs test/host.spec.mjs"
+    "test": "npm run build && node --test test/client-goal.spec.mjs test/html-preview.spec.mjs test/host.spec.mjs"
   },
   "exports": {
     ".": "./lib/index.js",
@@ -31,7 +31,8 @@
     "@lezer/highlight": "^1.0.0"
   },
   "devDependencies": {
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "jsdom": "^27.0.1"
   },
   "dsh": {
     "bundle": {
