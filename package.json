@@ -1,7 +1,7 @@
 {
   "name": "@lyhue1991/dsh-soup",
   "description": "dsh 体验增强四件套 = Jupyter风格SideBar + 中央文件预览Tab + 多行GoalBar + 实时Token流速徽标",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
