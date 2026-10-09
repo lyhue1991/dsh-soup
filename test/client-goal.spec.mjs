@@ -448,10 +448,15 @@ if (!clientSource.includes("ext === 'ipynb'")) throw new Error('previewKind must
 const fileIconsSource = readFileSync(new URL('../lib/client/file-icons.js', import.meta.url), 'utf8')
 if (!fileIconsSource.includes("py: 'py', rb: 'rb', go: 'go', rs: 'rs'")) throw new Error('code language table must cover common languages')
 const fileIcons = await import('../lib/client/file-icons.js')
+const previewRenderers = await import('../lib/client/preview-renderers.js')
 for (const name of ['a.md', 'x.ts', 'y.lua', 'LICENSE', 'noext', 'z.jpg']) {
   const svg = fileIcons.iconSvgFor({ type: 'file', name })
   if (typeof svg !== 'string' || svg.length === 0) throw new Error('iconSvgFor must resolve: ' + name)
 }
+for (const name of ['.gitignore', '.gitattributes', '.dockerignore', 'Dockerfile', 'Makefile', 'LICENSE']) {
+  if (!previewRenderers.isEditableTextFile(name)) throw new Error('text config must be editable: ' + name)
+}
+if (previewRenderers.isEditableTextFile('photo.png')) throw new Error('image files must not be editable')
 if (fileIcons.iconSvgFor({ type: 'directory', name: 'd', open: true }) !== fileIcons.NB_SVG.folderFavorite) {
   throw new Error('open directory must use folderFavorite')
 }
