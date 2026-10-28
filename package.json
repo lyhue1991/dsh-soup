@@ -7,7 +7,7 @@
   "scripts": {
     "build": "esbuild lib/client.entry.js --bundle --format=iife --platform=browser --target=es2020 --outfile=lib/client.js",
     "prepublishOnly": "npm run build",
-    "test": "npm run build && node --test test/client-goal.spec.mjs test/file-address-bridge.spec.mjs test/html-preview.spec.mjs test/host.spec.mjs"
+    "test": "npm run build && node --test test/client-goal.spec.mjs test/file-search.spec.mjs test/file-address-bridge.spec.mjs test/html-preview.spec.mjs test/host.spec.mjs"
   },
   "exports": {
     ".": "./lib/index.js",
@@ -26,6 +26,7 @@
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/language": "^6.12.1",
+    "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.5.4",
     "@codemirror/view": "^6.39.14",
     "@lezer/highlight": "^1.0.0"
