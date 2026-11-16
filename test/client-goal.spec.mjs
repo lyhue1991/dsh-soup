@@ -1,5 +1,5 @@
 // dsh-soup 客户端渲染测试：
-// 验证 Session log 与空白会话两处资源管理器入口，以及多行 GoalBar
+// 验证官方右侧栏入口接管与多行 GoalBar
 // （复用原生 goal projection + 动作动词）的展示与按钮状态机。
 // 测试场景：active / paused / blocked / 无目标 / 已完成 / 编辑态。
 import { readFileSync } from 'node:fs'
@@ -26,6 +26,7 @@ const React = {
     return hookStates[i]
   },
   useEffect: (fn, deps) => { effects.push({ fn, deps }) },
+  useCallback: (fn) => fn,
   useReducer: (reducer, initial) => {
     const i = hookIndex++
     if (hookStates[i] === undefined) hookStates[i] = [initial, () => {}]
@@ -58,6 +59,14 @@ const factoryModule = loadedFactory((name) => {
 // apply 注册 goal dock 到 slots
 const registered = []
 const sidebarRight = { openResource: () => 'official sidebar' }
+const documentListeners = {}
+globalThis.document = {
+  addEventListener: (type, listener, capture) => { documentListeners[type] = { listener, capture } },
+  removeEventListener: (type, listener) => {
+    if (documentListeners[type] && documentListeners[type].listener === listener) delete documentListeners[type]
+  },
+}
+const layoutCalls = []
 const ctx = {
   slots: {
     inject: (name, cb) => cb(),
@@ -66,7 +75,11 @@ const ctx = {
       return () => {}
     },
   },
-  layout: { isOpen: () => false },
+  layout: {
+    isOpen: () => false,
+    openRightbar: (...args) => layoutCalls.push(['openRightbar', ...args]),
+    closeRightbar: (...args) => layoutCalls.push(['closeRightbar', ...args]),
+  },
   sessions: { binding: () => ({ session: { projections: { faceOf: () => undefined } } }) },
   remote: { goals: { edit: () => Promise.resolve({ ok: true }), pause: () => Promise.resolve({ ok: true }), resume: () => Promise.resolve({ ok: true }), clear: () => Promise.resolve({ ok: true }) } },
   timer: { interval: () => () => {} },
@@ -90,54 +103,70 @@ if (!goalReg) throw new Error('goal dock not registered')
 if (goalReg.reg.locale !== 'goal') throw new Error('goal dock must use native goal locale')
 const goalRender = goalReg.renderFn
 
-// ---- 资源管理器入口：普通会话在 Session log 右侧 ----
-const headerToggle = registered.find((r) => r.reg && r.reg.id === 'dsh-soup-toggle')
-if (!headerToggle) throw new Error('session-header explorer toggle not registered')
-if (headerToggle.reg.name !== 'conversation.session.header.utilities') {
-  throw new Error('explorer toggle must use conversation.session.header.utilities')
+// ---- 资源管理器入口：沿用宿主默认右侧栏按钮 ----
+if (registered.some((r) => r.reg && (r.reg.id === 'dsh-soup-toggle' || r.reg.id === 'dsh-soup-hero-toggle'))) {
+  throw new Error('explorer must not register duplicate session-header or blank-session buttons')
 }
-resetHooks([false, { current: null }])
-const headerComponent = headerToggle.renderFn({
+const sessionTracker = registered.find((r) => r.reg && r.reg.id === 'dsh-soup-session-tracker')
+const blankSessionTracker = registered.find((r) => r.reg && r.reg.id === 'dsh-soup-blank-session-tracker')
+if (!sessionTracker || !blankSessionTracker) throw new Error('closed-rightbar session tracking must remain mounted')
+const trackerProps = {
   sessionId: 's1',
+  session: { blank: true, composerPhase: 'blank' },
   useSessions: (selector) => selector({ byId: { s1: { cwd: '/tmp/demo' } } }),
-})
-const headerElement = headerComponent.type(headerComponent.props)
-if (!headerElement.props.className.includes('expl-tool')) {
-  throw new Error('session-header explorer toggle must keep toolbar styling')
 }
-if (headerElement.props['aria-label'] !== 'explorer.label') {
-  throw new Error('session-header explorer toggle must use the i18n label key: ' + headerElement.props['aria-label'])
+const sessionTrackerElement = sessionTracker.renderFn(trackerProps)
+const blankTrackerElement = blankSessionTracker.renderFn(trackerProps)
+if (sessionTrackerElement.type(sessionTrackerElement.props) !== null ||
+    blankTrackerElement.type(blankTrackerElement.props) !== null) {
+  throw new Error('session scope trackers must not render an additional UI entry')
 }
-
-// ---- 资源管理器入口：空白会话在输入框上方、控件行右端 ----
-const heroToggle = registered.find((r) => r.reg && r.reg.id === 'dsh-soup-hero-toggle')
-if (!heroToggle) throw new Error('hero explorer toggle not registered')
-if (heroToggle.reg.name !== 'conversation.input.dock') {
-  throw new Error('hero explorer toggle must use conversation.input.dock')
+const officialExpand = documentListeners.click
+if (!officialExpand || officialExpand.capture !== true) throw new Error('official rightbar click must be intercepted in capture phase')
+let prevented = false
+let stopped = false
+const expandEvent = {
+  target: { closest: (selector) => selector === '[data-sidebar-right-expand]' ? {} : null },
+  preventDefault: () => { prevented = true },
+  stopImmediatePropagation: () => { stopped = true },
 }
-const renderHero = (session) => {
-  resetHooks([false])
-  const component = heroToggle.renderFn({
-    sessionId: 's1',
-    session,
-    useSessions: (selector) => selector({ byId: { s1: { cwd: '/tmp/demo' } } }),
-  })
-  return component.type(component.props)
+officialExpand.listener(expandEvent)
+if (!prevented || !stopped) throw new Error('official rightbar click must suppress the native action')
+if (layoutCalls.length !== 1 || layoutCalls[0][0] !== 'openRightbar' || layoutCalls[0][1] !== true || layoutCalls[0][2] !== false) {
+  throw new Error('official rightbar button must open the dsh-soup surface through layout')
 }
-const heroElement = renderHero({
-  blank: true,
-  composerPhase: 'blank',
-  cwd: '/tmp/demo',
-})
-if (!heroElement || heroElement.props.className !== 'expl-hero-dock') {
-  throw new Error('blank session needs the hero explorer dock')
+const rightbarReg = registered.find((r) => r.reg && r.reg.name === 'rightbar')
+if (!rightbarReg) throw new Error('dsh-soup rightbar surface must be registered')
+const rightbarRoot = rightbarReg.renderFn(trackerProps)
+const panelComponent = rightbarRoot.children[0]
+const panelElement = panelComponent.type(panelComponent.props)
+if (panelElement.props['data-dsh-soup-rightbar'] !== '1' || panelElement.props['data-dsh-soup-open'] !== '1') {
+  throw new Error('open rightbar must mark its panel so the official expand icon hides')
 }
-if (!heroElement.children[0].props.className.includes('expl-tool')) {
-  throw new Error('hero explorer toggle must use toolbar styling')
+function findAria(node, label) {
+  if (!node || typeof node !== 'object') return null
+  if (node.props && node.props['aria-label'] === label) return node
+  for (const child of node.children || []) {
+    const found = findAria(child, label)
+    if (found) return found
+  }
+  return null
 }
-if (renderHero({ blank: false, composerPhase: 'active', cwd: '/tmp/demo' }) !== null) {
-  throw new Error('hero explorer toggle must hide once Session log exists')
+const closeExplorer = findAria(panelElement, 'explorer.closePanel')
+if (!closeExplorer) throw new Error('explorer rightbar must have a close control')
+closeExplorer.props.onClick({ currentTarget: { parentElement: null } })
+if (layoutCalls.length !== 2 || layoutCalls[1][0] !== 'closeRightbar') {
+  throw new Error('explorer close control must close the rightbar layout')
 }
+const closedPanelElement = panelComponent.type(panelComponent.props)
+if (closedPanelElement.props['data-dsh-soup-open'] !== '0') {
+  throw new Error('closed rightbar must allow the official expand icon to reappear')
+}
+officialExpand.listener(expandEvent)
+if (layoutCalls.length !== 3 || layoutCalls[2][0] !== 'openRightbar') {
+  throw new Error('official rightbar button must reopen after the explorer closes')
+}
+delete globalThis.document
 
 // 渲染辅助：goalRender 返回 { type: GoalDock, props }，递归调用直到得到原生 DOM 元素树
 function renderCard(props) {
@@ -270,16 +299,10 @@ if (!clientSource.includes("rpc('speed-status'")) throw new Error('speed badge m
 if (!clientSource.includes("status.phase === 'waiting'")) throw new Error('speed badge must render the waiting phase')
 if (!stylesSource.includes('resize:none;overflow:hidden')) throw new Error('edit textarea must disable resize and scrollbar')
 if (!clientSource.includes('Math.max(64, input.scrollHeight)')) throw new Error('edit textarea must grow from scrollHeight')
-if (!stylesSource.includes('calc(var(--dsh-composer-side-clearance) + 12px)')) {
-  throw new Error('hero explorer toggle must clear the input card corner')
-}
-if (!clientSource.includes('function setHeroDetailsWidth') || !clientSource.includes('setHeroDetailsWidth(event.currentTarget, DETAILS_DEFAULT)')) {
-  throw new Error('hero explorer toggle must open the blank-session details grid directly')
-}
 const closeLabelIndex = clientSource.indexOf("'aria-label': T('explorer.closePanel')")
 const closeHandlerSource = clientSource.slice(Math.max(0, closeLabelIndex - 500), closeLabelIndex)
-if (closeLabelIndex < 0 || !closeHandlerSource.includes('layout.closeDetails()') || !closeHandlerSource.includes('setHeroDetailsWidth(event.currentTarget, 0)')) {
-  throw new Error('explorer close button must also close the blank-session details grid directly')
+if (closeLabelIndex < 0 || !closeHandlerSource.includes('layout.closeRightbar()') || !closeHandlerSource.includes('setDetailsWidth(event.currentTarget, 0)')) {
+  throw new Error('explorer close button must close the rightbar and collapse its grid track')
 }
 
 // ---- 场景 7：多行 objective 不被截断（无 text-overflow:ellipsis）----
@@ -426,11 +449,15 @@ if (!clientSource.includes('setFrameWidth(DETAILS_DEFAULT)')) throw new Error('r
 if (!clientSource.includes("slots.inject('rightbar'")) throw new Error('dsh-soup must replace the official rightbar occupant')
 if (!clientSource.includes("name: 'rightbar', priority: -1")) throw new Error('rightbar replacement must have lower priority than the official occupant')
 if (!clientSource.includes("slots.inject('rightbar'") || !clientSource.includes("create(PreviewOverlay)")) throw new Error('rightbar replacement must keep the blank-session preview overlay')
-if (!clientSource.includes('getLayout().openRightbar(true, false)')) throw new Error('rightbar toggle must use the 0.1.5 layout API')
-if (!clientSource.includes('getLayout().closeRightbar()')) throw new Error('rightbar close must use the 0.1.5 layout API')
+if (!clientSource.includes('layout.openRightbar(true, false)')) throw new Error('rightbar toggle must use the 0.1.5 layout API')
+if (!clientSource.includes('layout.closeRightbar()')) throw new Error('rightbar close must use the 0.1.5 layout API')
 if (!clientSource.includes('[data-sidebar-right-expand]')) throw new Error('official rightbar expand button must be unified with dsh-soup')
 if (!clientSource.includes('stopImmediatePropagation')) throw new Error('official rightbar action must be intercepted')
-if (!stylesSource.includes('[data-sidebar-right-expand],[data-sidebar-right-expand-placeholder]{display:none!important;}')) throw new Error('official rightbar expand control must be hidden')
+if (!stylesSource.includes('body:has(.expl-panel[data-dsh-soup-rightbar="1"][data-dsh-soup-open="1"]) [data-sidebar-right-expand]{display:none!important;}')) {
+  throw new Error('official rightbar expand control must hide only while the explorer is open')
+}
+if (stylesSource.includes('[data-sidebar-right-expand-placeholder]{display:none!important;}')) throw new Error('official rightbar placeholder must remain available')
+if (clientSource.includes("id: 'dsh-soup-toggle'") || clientSource.includes("id: 'dsh-soup-hero-toggle'")) throw new Error('duplicate dsh-soup rightbar buttons must not be registered')
 if (!clientSource.includes("getAttribute('data-dsh-soup-preview') === '1'") || !stylesSource.includes('data-dsh-soup-preview="1"')) throw new Error('reading-mode css marker missing')
 if (!stylesSource.includes(".dfv-header{position:sticky;top:0;")) throw new Error('preview tabs/path header must stay sticky')
 if (!clientSource.includes("create('div', { className: 'dfv-header' }")) throw new Error('preview tabs/path header wrapper missing')
